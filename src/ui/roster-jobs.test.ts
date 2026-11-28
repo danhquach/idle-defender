@@ -7,13 +7,13 @@
 import { describe, expect, it } from 'vitest';
 import type { OwnedWeapon } from '../core/armoury.ts';
 import { recruit } from '../core/camp.ts';
-import { JOB_IDS, type JobId, type WeaponId } from '../core/data.ts';
+import { JOB_IDS, UNTRAINED, type JobId, type WeaponId } from '../core/data.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
 import { equipGun, finishSquadHorde, startSquadHorde } from '../core/hordeonly.ts';
-import { xpForLevel } from '../core/stats.ts';
+import { jobBonus, levelBonus, xpForLevel } from '../core/stats.ts';
 import { squadScreen } from './hud.ts';
 import { joinCards } from './joining.ts';
-import { JOB_SHORT, jobLine, NO_BONUS, NO_STACK, statRows } from './jobtext.ts';
+import { JOB_SHORT, jobLine, NO_BONUS, NO_STACK, statRows, untrainedLine } from './jobtext.ts';
 import { createRoster, rosterTiles } from './squadroster.ts';
 import { JOB_NAME } from './text/index.ts';
 
@@ -56,18 +56,20 @@ describe('profession words (ID-149)', () => {
       'Hunter: +12.0% crit chance, +18.0% crit damage with Sniper rifle, Carbine',
     );
     expect(jobLine('builder', 21)).toBe(
-      'Construction worker: +35 max HP, +1.3 armour, +5.0% wall max HP while on the field',
+      'Construction worker: +35 max HP, +1.3 armour, +5.0% wall max HP while on the field; −10% reload speed, −15% with a heavier gun (not trained)',
     );
-    expect(jobLine('chef', 21)).toBe('Chef: +10 max HP for everyone on the field');
+    expect(jobLine('chef', 21)).toBe(
+      'Chef: +10 max HP for everyone on the field; −10% reload speed, −15% with a heavier gun (not trained)',
+    );
     expect(jobLine('hunter', 1)).toBe(
       'Hunter: from level 2, more crit chance and crit damage with Sniper rifle, Carbine',
     );
     // ID-155: a Paramedic's points work from level 1; the old rest cut is gone.
     expect(jobLine('paramedic', 1)).toBe(
-      'Paramedic: +20% chance a downed survivor skips rest (Paramedics in camp add up, to 80%); from level 2, more injury dodge and healing for the squad',
+      'Paramedic: +20% chance a downed survivor skips rest (Paramedics in camp add up, to 80%); from level 2, more injury dodge and healing for the squad; −10% reload speed, −15% with a heavier gun (not trained)',
     );
     expect(jobLine('paramedic', 21)).toBe(
-      'Paramedic: +20.0% injury dodge, everyone on the field heals 0.20% of max HP a second, +30% chance a downed survivor skips rest (Paramedics in camp add up, to 80%)',
+      'Paramedic: +20.0% injury dodge, everyone on the field heals 0.20% of max HP a second, +30% chance a downed survivor skips rest (Paramedics in camp add up, to 80%); −10% reload speed, −15% with a heavier gun (not trained)',
     );
     expect(jobLine('paramedic', 21)).not.toContain('horde less');
     for (const j of JOB_IDS) {
@@ -307,6 +309,104 @@ describe('Max HP counts the Chef on the field (ID-408)', () => {
     expect(field.colSpan).toBe(4);
     expect(row.previousElementSibling!.querySelector('th')!.textContent).toBe('Max HP');
     expect(row.previousElementSibling!.querySelector('.rv-stat-field')).toBeNull();
-    expect(open(game, bench.id).querySelector('.rv-stat-field')).toBeNull();
+    // The bench Student's only note is their slower reload (ID-287), never the Chef's HP.
+    const benchNotes = [...open(game, bench.id).querySelectorAll('.rv-stat-field')];
+    expect(benchNotes.map((n) => n.querySelector('.sr-only')!.textContent)).toEqual([
+      'Reload speed: ',
+    ]);
+  });
+});
+
+describe('a non-fighting job reloads slower, on screen (ID-287)', () => {
+  const holding = (d: RosterDefender, base: WeaponId): RosterDefender => ({
+    ...d,
+    loadout: { primary: gun('g1', base), secondary: null, item: null },
+  });
+  const reload = (rows: ReturnType<typeof statRows>) =>
+    rows.find((r) => r.label === 'Reload speed')!;
+
+  it('says it for the gun in hand, or both when no gun is given', () => {
+    expect(untrainedLine('chef', 'pistol')).toBe('−10% reload speed (not trained)');
+    expect(untrainedLine('chef', gun('g', 'rifle'))).toBe('−10% reload speed (not trained)');
+    expect(untrainedLine('chef', gun('g', 'lmg'))).toBe(
+      '−15% reload speed (not trained, heavier gun)',
+    );
+    expect(untrainedLine('chef')).toBe('−10% reload speed, −15% with a heavier gun (not trained)');
+    // A blade or a tool takes no reload: both, as with no gun.
+    expect(untrainedLine('chef', 'knife')).toBe(untrainedLine('chef'));
+    for (const j of JOB_IDS) {
+      const fighting = ['police', 'soldier', 'hunter', 'guard'].includes(j);
+      expect(untrainedLine(j, gun('g', 'lmg')) === null, j).toBe(fighting);
+      expect(jobLine(j, 7).includes('not trained'), j).toBe(!fighting);
+      expect(jobLine(j, 1).includes('not trained'), j).toBe(!fighting);
+    }
+    expect(jobLine('chef', 21, gun('g', 'sniper'))).toBe(
+      'Chef: +10 max HP for everyone on the field; −15% reload speed (not trained, heavier gun)',
+    );
+  });
+
+  it('the Reload speed row: the total counts it, the note under it names it', () => {
+    // Level 1: no level part yet, so the total is the penalty alone.
+    expect(reload(statRows(person(1, 'chef', 1), gun('g', 'smg')))).toMatchObject({
+      total: '−10.0%',
+      level: '—',
+      job: '—',
+      off: false,
+      field: '−10% not trained',
+    });
+    expect(reload(statRows(person(1, 'chef', 1), gun('g', 'lmg')))).toMatchObject({
+      total: '−15.0%',
+      field: '−15% not trained, heavier gun',
+    });
+    // Level 21 Student: their own reload part adds to the level's, then the penalty
+    // multiplies: speed share 1 − (1 − level − job) × (1 + the penalty).
+    const lv = levelBonus(21, 'reload');
+    const job = jobBonus(21, 'student', 'reload');
+    const want = 1 - (1 - lv - job) * (1 + UNTRAINED.reload);
+    expect(want).toBeGreaterThan(0);
+    expect(reload(statRows(person(1, 'student'), gun('g', 'pistol')))).toMatchObject({
+      total: `+${(want * 100).toFixed(1)}%`,
+      level: `+${(lv * 100).toFixed(1)}%`,
+      job: `+${(job * 100).toFixed(1)}%`,
+      field: '−10% not trained',
+    });
+  });
+
+  it('a fighting job, on its guns or off them, has no note and the same total', () => {
+    const own = reload(statRows(person(1, 'police'), 'pistol'));
+    expect(own.field).toBe('');
+    const off = reload(statRows(person(1, 'police'), gun('g', 'lmg')));
+    expect(off).toMatchObject({
+      total: `+${(levelBonus(21, 'reload') * 100).toFixed(1)}%`,
+      off: true,
+      field: '',
+    });
+  });
+
+  it('the Roster panel says it for the held gun, with the note under Reload speed', () => {
+    const chef = holding(person(1, 'chef'), 'lmg');
+    const scrim = open(camp([chef]), chef.id);
+    expect(scrim.querySelector('.rv-job-line')!.textContent).toContain(
+      '−15% reload speed (not trained, heavier gun)',
+    );
+    const notes = [...scrim.querySelectorAll('.rv-stat-field')].map((n) => n.textContent);
+    expect(notes).toContain('Reload speed: (−15% not trained, heavier gun)');
+    const row = [...scrim.querySelectorAll('.rv-stat-field')].find((n) =>
+      n.textContent!.startsWith('Reload'),
+    )!.parentElement!;
+    expect(row.previousElementSibling!.querySelector('th')!.textContent).toBe('Reload speed');
+  });
+
+  it('the newcomer asking to join says both', () => {
+    const game = { ...camp([person(1, 'hunter'), person(2, 'chef')]), hordeNumber: 1 };
+    // Seed 1's newcomer is a Mechanic: a non-fighting job.
+    const s = { ...startSquadHorde(game, 1, NOW), outcome: 'won' as const };
+    expect(recruit(3, 1).job).toBe('mechanic');
+    const card = joinCards(finishSquadHorde(game, s))[0]!;
+    expect(card.profession).toBe('Mechanic');
+    expect(card.job).toBe(`${jobLine('mechanic', 1)}`);
+    expect(card.job.endsWith('; −10% reload speed, −15% with a heavier gun (not trained)')).toBe(
+      true,
+    );
   });
 });

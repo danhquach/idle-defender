@@ -1,21 +1,31 @@
 // Professions in words (ID-149): a survivor's profession name, what it gives at their level
 // ("Hunter: +12% crit chance, +18% crit damage with Sniper rifle, Carbine"), whether the gun
-// held fits a fighting job, the no-stack note, and their stats split into the level's part
-// and the profession's. Pure: no DOM.
-import type { Held } from '../core/armoury.ts';
+// held fits a fighting job, the no-stack note, a non-fighting job's slower reload (ID-287), and
+// their stats split into the level's part and the profession's. Pure: no DOM.
+import { baseOf, type Held } from '../core/armoury.ts';
 import {
   CRIT_DAMAGE,
   DEFENDER_HP,
   FIELD_EFFECTS,
+  HEAVIER_GUNS,
   JOBS,
   PATCH_UP,
+  UNTRAINED,
   type Job,
   type JobEffect,
   type JobId,
   type LevelBonusId,
 } from '../core/data.ts';
 import type { RosterDefender } from '../core/game.ts';
-import { fieldMaxHp, jobBonus, jobFits, levelBonus, levelOf } from '../core/stats.ts';
+import { isGun } from '../core/loadout.ts';
+import {
+  fieldMaxHp,
+  jobBonus,
+  jobFits,
+  levelBonus,
+  levelOf,
+  untrainedReload,
+} from '../core/stats.ts';
 import { WEAPON_NAME, JOB_NAME } from './text/index.ts';
 
 /** A profession's name where room is short (a Roster tab on a phone): 8 letters at most, measured to fit a 375 px phone. */
@@ -44,6 +54,32 @@ const SHARED_PART: Partial<Record<JobId, string>> = {
 };
 
 const pct = (x: number, digits = 1): string => `+${(x * 100).toFixed(digits)}%`;
+/** The minus sign the game prints. */
+const MINUS = '−';
+/** A share with its sign: "+3.5%" or "−3.5%"; one that rounds to 0 prints "+0.0%". */
+const signed = (x: number): string =>
+  Math.round(x * 1000) < 0 ? `${MINUS}${(-x * 100).toFixed(1)}%` : pct(Math.max(0, x));
+/** A whole share off: "−10%". */
+const off = (x: number): string => `${MINUS}${Math.round(x * 100)}%`;
+
+/** Whether `held` is one of the heavier guns (ID-287, `HEAVIER_GUNS`). */
+const heavierGun = (held: Held): boolean =>
+  (HEAVIER_GUNS as readonly string[]).includes(baseOf(held));
+
+/**
+ * A non-fighting job's slower reload in words (ID-287), `held` the gun in hand: "−10% reload
+ * speed (not trained)", "−15% reload speed (not trained, heavier gun)"; with no gun given,
+ * both: "−10% reload speed, −15% with a heavier gun (not trained)". Null for a fighting job.
+ */
+export function untrainedLine(job: JobId, held?: Held): string | null {
+  if ((JOBS[job] as Job).kind === 'fight') return null;
+  if (held === undefined || !isGun(held)) {
+    const heavier = UNTRAINED.reload + UNTRAINED.heavier;
+    return `${off(UNTRAINED.reload)} reload speed, ${off(heavier)} with a heavier gun (not trained)`;
+  }
+  const why = heavierGun(held) ? 'not trained, heavier gun' : 'not trained';
+  return `${off(untrainedReload(job, held))} reload speed (${why})`;
+}
 
 /**
  * Each effect as it prints at value `v`, and its words while it is still 0 (level 1). One
@@ -102,12 +138,13 @@ export const jobGuns = (job: JobId): string =>
 /**
  * What `job` gives at `level`, in words: "Hunter: +12.0% crit chance, +18.0% crit damage
  * with Sniper rifle, Carbine". At level 1 it gives nothing yet, so it says what levels bring:
- * "Hunter: from level 2, more crit chance and crit damage with Sniper rifle, Carbine".
+ * "Hunter: from level 2, more crit chance and crit damage with Sniper rifle, Carbine". A
+ * non-fighting job ends with its slower reload (`untrainedLine`, with `held`, ID-287).
  */
-export function jobLine(job: JobId, level: number): string {
+export function jobLine(job: JobId, level: number, held?: Held): string {
   const j: Job = JOBS[job];
   const effects = Object.keys(j.bonus) as JobEffect[];
-  const guns = j.kind === 'fight' ? ` with ${jobGuns(job)}` : '';
+  const guns = j.kind === 'fight' ? ` with ${jobGuns(job)}` : `; ${untrainedLine(job, held)}`;
   if (level <= 1) {
     // An effect with a base gives it already (ID-155: a Paramedic's points).
     const now = effects.filter((e) => EFFECT[e].base).map((e) => EFFECT[e].value(0));
@@ -145,7 +182,7 @@ export function jobInfo(d: RosterDefender, held: Held, squad: readonly RosterDef
   const twins = others.map((o) => o.name);
   return {
     name: JOB_NAME[d.job],
-    line: jobLine(d.job, levelOf(d.xp).level),
+    line: jobLine(d.job, levelOf(d.xp).level, held),
     off: !jobFits(d.job, held),
     // Who else has it and whose counts, so the player knows whom to swap out.
     note:
@@ -178,7 +215,11 @@ export interface StatRow {
   job: string;
   /** The profession's part doesn't count with the gun held (a fighting job off its guns). */
   off: boolean;
-  /** A Chef's field part of the total, "+11 Chef (Cole) on the field" (ID-408); '' = none. */
+  /**
+   * A part of the total from outside the two columns, named under the row: a Chef's on the
+   * field, "+11 Chef (Cole) on the field" (ID-408), or a non-fighting job's slower reload,
+   * "−10% not trained" (ID-287); '' = none.
+   */
   field: string;
 }
 
@@ -247,7 +288,15 @@ export function statRows(
     };
   };
   const feed = fieldHp(d, field);
+  // A non-fighting job's reload (ID-287): reload time ×(1 + pen) on top, so under the speed
+  // share the row prints (time ×(1 − share)) the total is 1 − (1 − level − job) × (1 + pen).
+  const pen = untrainedReload(d.job, held);
   const plus = (x: number): string => pct(x);
+  const reload = row('Reload speed', 'reload', 0, lv('reload'), plus, plus);
+  if (pen > 0) {
+    reload.total = signed(1 - (1 - lv('reload') - (fits ? jb('reload') : 0)) * (1 + pen));
+    reload.field = `${off(pen)} not trained${heavierGun(held) ? ', heavier gun' : ''}`;
+  }
   const plain = (x: number): string => `${(x * 100).toFixed(1)}%`;
   const maxHp = row(
     'Max HP',
@@ -269,7 +318,7 @@ export function statRows(
       (x) => x.toFixed(1),
     ),
     row('Fire rate', 'fireRate', 0, lv('fireRate'), plus, plus),
-    row('Reload speed', 'reload', 0, lv('reload'), plus, plus),
+    reload,
     row('Accuracy', 'spread', 0, lv('spread'), plus, plus),
     row('Crit chance', 'crit', 0, lv('crit'), plus, plain),
     row(

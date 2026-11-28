@@ -18,12 +18,21 @@ import { localHorde } from '../modes.ts';
 import { playSquadHorde } from '../sim.ts';
 import { recommendedPower, squadPower } from '../squadpower.ts';
 import { cacheFor } from './cache.ts';
-import { holdLevel, inMode, SEEDS, squad, squadAbove, wins, withRef } from './shared.ts';
+import { holdFrom, inMode, SEEDS, squad, squadAbove, wins, withRef } from './shared.ts';
 
 const keep = cacheFor(import.meta.url);
 
+/**
+ * `game` with every survivor a Security guard (ID-287): these weigh the modes against Normal, not jobs, and a
+ * Security guard is a plain survivor with every gun here (theirs are the SMG and Machine Pistol).
+ */
+const guards = (game: GameState): GameState => ({
+  ...game,
+  roster: game.roster.map((d) => ({ ...d, job: 'guard' as const })),
+});
+
 /** The expected squad, in Nightmare from Horde 1, at the gun level `level`. */
-const nightmare = (level: number): GameState => inMode(squad(51, level), 'nightmare');
+const nightmare = (level: number): GameState => inMode(guards(squad(51, level)), 'nightmare');
 
 /** The lowest gun level whose Nightmare squad has `share` of Normal Horde 50's Recommended Power. */
 function levelOver(share: number): number {
@@ -55,7 +64,7 @@ describe('difficulty modes (ID-218, ID-223)', () => {
   const firsts: boolean[] = [];
   const ends: (number | null)[] = [];
   beforeAll(() => {
-    hold = keep('hold level', holdLevel);
+    hold = keep('hold level', () => holdFrom((level) => withRef(guards(squad(50, level))), 50));
     strong = keep('2x level', () => levelOver(2));
     for (let i = 1; i <= SEEDS; i++) {
       firsts.push(

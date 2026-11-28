@@ -24,7 +24,13 @@ function fight(n: number, size: number): GameState {
   return {
     ...g,
     hordeNumber: n,
-    roster: Array.from({ length: size }, (_, i) => ({ ...recruit(i + 1), xp: 0 })),
+    // All Soldiers (ID-287): these weigh cards, not jobs, in a fight tuned to be close, and a
+    // Soldier with the Pistol is exactly a plain survivor (jobs.test.ts).
+    roster: Array.from({ length: size }, (_, i) => ({
+      ...recruit(i + 1),
+      xp: 0,
+      job: 'soldier' as const,
+    })),
     camp: { ...g.camp, recruits: size },
   };
 }

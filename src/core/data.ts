@@ -1803,6 +1803,25 @@ export const JOBS = {
   },
 } as const satisfies Record<string, Job>;
 export type JobId = keyof typeof JOBS;
+/**
+ * A non-fighting job's reload (ID-287, design §6 Professions): never trained to handle a gun,
+ * they reload every gun `reload` slower (reload time ×1.10), from level 1, and a heavier gun
+ * (`HEAVIER_GUNS`) `heavier` more on top (×1.15). The fighting jobs have none. Eased from the
+ * issue's ×1.15 / ×1.20, which tipped the horde balance tests (Hell 30, Nightmare 1).
+ */
+export const UNTRAINED = { reload: 0.1, heavier: 0.05 } as const;
+/**
+ * The heavier guns (ID-287): by the gun's weight in the hands, which has nothing to do with
+ * the gun classes enemy traits use (`GUN_CLASS`, where the LMG is light).
+ */
+export const HEAVIER_GUNS = [
+  'lmg',
+  'sniper',
+  'assault',
+  'shotgun',
+  'cartridge',
+  'handcannon',
+] as const satisfies readonly GunBase[];
 /** The effects that work for the squad or camp from the field, and never stack (ID-149). */
 export const FIELD_EFFECTS: readonly JobEffect[] = [
   'squadHp',

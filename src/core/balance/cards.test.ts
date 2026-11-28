@@ -35,7 +35,13 @@ function closeFight(): GameState {
   return {
     ...g,
     hordeNumber: HORDE,
-    roster: Array.from({ length: SQUAD }, (_, i) => ({ ...recruit(i + 1), xp: 0 })),
+    // All Soldiers (ID-287): these weigh cards, not jobs, in a fight tuned to be close, and a
+    // Soldier with the Pistol is exactly a plain survivor (jobs.test.ts).
+    roster: Array.from({ length: SQUAD }, (_, i) => ({
+      ...recruit(i + 1),
+      xp: 0,
+      job: 'soldier' as const,
+    })),
     camp: { ...g.camp, recruits: SQUAD },
   };
 }

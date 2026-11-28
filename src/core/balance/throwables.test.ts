@@ -16,17 +16,26 @@ import { cardFight, SEEDS, squadAt } from './shared.ts';
 
 const keep = cacheFor(import.meta.url);
 
+/**
+ * `game` with every survivor a Security guard (ID-287): these weigh throwables, not jobs, and a
+ * Security guard is a plain survivor with every gun here (theirs are the SMG and Machine Pistol).
+ */
+const guards = (game: GameState): GameState => ({
+  ...game,
+  roster: game.roster.map((d) => ({ ...d, job: 'guard' as const })),
+});
+
 const THROWABLES = ['frag-grenades', 'flashbang', 'molotov'] as const satisfies UpgradeId[];
 
 /** Horde `n` with `size` fresh survivors, each with the Pistol they start with. */
 function fresh(n: number, size: number): GameState {
   const g = newGame('horde');
-  return {
+  return guards({
     ...g,
     hordeNumber: n,
     roster: Array.from({ length: size }, (_, i) => ({ ...recruit(i + 1), xp: 0 })),
     camp: { ...g.camp, recruits: size },
-  };
+  });
 }
 
 /** Wins over `2 × SEEDS` seeds with `card` picked at the start; every offer turned down. */
@@ -59,7 +68,7 @@ const SCENES = {
    */
   line: () => {
     const g = squadAt(6, 1);
-    return { ...g, roster: g.roster.map((d) => ({ ...d, xp: xpForLevel(9) })) };
+    return guards({ ...g, roster: g.roster.map((d) => ({ ...d, xp: xpForLevel(9) })) });
   },
 };
 

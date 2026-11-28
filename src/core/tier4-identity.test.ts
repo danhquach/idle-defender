@@ -39,13 +39,16 @@ const ARMS: Record<string, { n: number; level: number; tech?: TechId[] }> = {
   'tier13-h9': { n: 9, level: 8, tech: TIER_1_3 },
 };
 
-/** Digest and RNG position (`rng.s`) of each arm's finished horde, recorded on origin/main at 0.5.206 (Node 25). */
+/**
+ * Digest and RNG position (`rng.s`) of each arm's finished horde, recorded on origin/main at
+ * 0.5.206 (Node 25); re-recorded in ID-287 (non-fighting jobs reload slower).
+ */
 const RECORDED: Record<string, [string, number]> = {
-  'bare-h4': ['4f914e54:5232', 3964940904],
-  'bare-h9': ['a234aebb:6337', 363265009],
-  'empty-h9': ['a234aebb:6337', 363265009],
-  'tier13-h4': ['37caab11:5426', 3964940904],
-  'tier13-h9': ['b199544f:6467', 740250597],
+  'bare-h4': ['d85f9384:5351', 1257596436],
+  'bare-h9': ['47589016:6529', 199658554],
+  'empty-h9': ['47589016:6529', 199658554],
+  'tier13-h4': ['7a3365d3:5545', 1257596436],
+  'tier13-h9': ['af229730:6721', 199658554],
 };
 
 /**
@@ -53,9 +56,7 @@ const RECORDED: Record<string, [string, number]> = {
  * RNG positions are the same; only float text in the state differs. Taken from the branch on CI.
  */
 const NODE_22: Record<string, [string, number]> = {
-  'bare-h9': ['1748d3ed:6332', 363265009],
-  'empty-h9': ['1748d3ed:6332', 363265009],
-  'tier13-h9': ['92f44ae5:6462', 740250597],
+  // ID-287: emptied with the re-record; CI's values go here where they differ.
 };
 
 /** Node's major version: picks the digests recorded on that runtime. */
