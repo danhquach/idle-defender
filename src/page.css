@@ -6508,10 +6508,14 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   position: relative;
 }
 
-/* Every gun fits the tile, a tall one (pistol, machine pistol) as well as a long one. */
+/* Every gun fits the tile, a tall one (pistol, machine pistol) as well as a long one. It sits at
+   the tile's top, 2 px narrower than the tile (ID-297), so a long gun's barrel end (the LMG's
+   bipod is the worst) stops short of the class badge in the bottom-right corner and its ends
+   clear the rounded corners; a tall gun keeps its size. */
 .rv-tab-gun .rv-gico-img {
-  width: 100%;
+  width: calc(100% - 2px);
   height: 100%;
+  object-position: 50% 0;
 }
 
 /* The DPS's cell (ID-180): the number, then the ★ in flow at the cell's end, so the star
