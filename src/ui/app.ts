@@ -1313,6 +1313,8 @@ export function start(root: HTMLElement, art: Art): void {
     fightCam = isShortTouch(window)
       ? frameCamera(view, { space: HUD_SPACE_SHORT })
       : frameCamera(view, { bottom: hud.bottomSpace(), top: hud.topSpace() });
+    // The browser layout tests (e2e/) read the fight camera here to find the field on screen (ID-283).
+    canvas.dataset.fightCamera = JSON.stringify(fightCam);
     // The horde-only build shows the fight frame between hordes too.
     buildCam = panel ? buildCamera(view, panel.room(view)) : fightCam;
     cam = horde ? fightCam : buildCam;

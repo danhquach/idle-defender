@@ -5466,7 +5466,8 @@ const MOAT_LOOK = {
   flames: 6,
   flameRadius: 70,
 } as const;
-const NET_LOOK = { alpha: 0.65, seconds: 0.5 } as const;
+/** `rest`: the net's strength between pulses (ID-283), so the band shows all fight long. */
+const NET_LOOK = { alpha: 0.65, rest: 0.2, seconds: 0.5 } as const;
 /** The Wall Machine Gun's sprite height (px at zoom 1, as `MORTAR.height`). */
 const WALL_GUN_LOOK = { height: 46 } as const;
 /**
@@ -5559,22 +5560,24 @@ function drawMoat(ctx: CanvasRenderingContext2D, art: Art, scene: Scene, cam: Ca
 }
 
 /**
- * Shock Net (ID-264): for the moment after a pulse nets someone, the net's art (`NET_ART`)
- * lies across the wire band, tiled down the field, flat and squashed by the tilt, fading in
- * and out over the pulse. Nothing is drawn between pulses.
+ * Shock Net (ID-264): the net's art (`NET_ART`) lies across the wire band, tiled down the field,
+ * flat and squashed by the tilt. Between pulses it shows faintly (`NET_LOOK.rest`, ID-283) so the
+ * player sees where it works; for the moment after a pulse nets someone it flares up to
+ * `NET_LOOK.alpha` and back.
  */
 function drawNetPulse(ctx: CanvasRenderingContext2D, art: Art, scene: Scene, cam: Camera): void {
   if (scene.nextNetAt === undefined) return;
   const band = netBand(scene);
   if (!band) return;
   const age = scene.time - (scene.nextNetAt - CARD.net.every);
-  if (age < 0 || age >= NET_LOOK.seconds) return;
+  const flare =
+    age >= 0 && age < NET_LOOK.seconds ? Math.sin((Math.PI * age) / NET_LOOK.seconds) : 0;
   const img = art[NET_ART];
   const width = band.to - band.from;
   const tile = (width * img.height) / img.width;
   // The net is light on dark ground: it adds its glow instead of covering the ground.
   ctx.globalCompositeOperation = 'lighter';
-  ctx.globalAlpha = NET_LOOK.alpha * Math.sin((Math.PI * age) / NET_LOOK.seconds);
+  ctx.globalAlpha = NET_LOOK.rest + (NET_LOOK.alpha - NET_LOOK.rest) * flare;
   for (let y = tile / 2; y - tile / 2 < FIELD.height; y += tile) {
     groundArt(ctx, img, (band.from + band.to) / 2, y, width / 2, cam);
   }

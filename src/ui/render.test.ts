@@ -1211,19 +1211,28 @@ describe('drawScene with art', () => {
       });
     });
 
-    it('the net is drawn across the band only while a pulse fires, fading in and out', () => {
+    it('the net lies faintly across the band all fight, flaring while a pulse fires (ID-283)', () => {
       const at = (age: number) =>
         placed({ ...wall, taken: ['shock-net'], nextNetAt: wall.time - age + CARD.net.every });
-      expect(count(at(0.25), 'shock-net')).toBeGreaterThan(1);
-      expect(count(at(1), 'shock-net')).toBe(0);
-      expect(count(at(0.6), 'shock-net')).toBe(0);
+      const net = (r: { drawn: ArtId[]; alphas: number[] }) =>
+        r.alphas.filter((_, i) => r.drawn[i] === 'shock-net');
+      // Between pulses, and before the first one nets anyone (nextNetAt is the pick time).
+      for (const r of [at(1), at(0.6), at(CARD.net.every + 30)]) {
+        expect(net(r).length).toBeGreaterThan(1);
+        expect(net(r).every((a) => a === 0.2)).toBe(true);
+      }
+      // No card, or no wall to put the band in front of: nothing.
       expect(count(placed({ ...wall, taken: ['shock-net'] }), 'shock-net')).toBe(0);
-      const peak = Math.max(...at(0.25).alphas.filter((a) => a < 1));
-      expect(peak).toBeGreaterThan(0.55);
+      expect(
+        count(placed({ ...blank(), taken: ['shock-net'], nextNetAt: CARD.net.every }), 'shock-net'),
+      ).toBe(0);
+      const peak = Math.max(...net(at(0.25)));
+      expect(peak).toBeGreaterThan(0.6);
       expect(peak).toBeLessThanOrEqual(0.65);
-      // Quick fade at the ends of the pulse.
-      const edge = at(0.02).alphas.filter((a) => a < 1);
-      expect(Math.max(...edge)).toBeLessThan(0.1);
+      // The flare starts and ends at the resting strength, with no jump.
+      expect(Math.max(...net(at(0.02)))).toBeLessThan(0.3);
+      expect(Math.min(...net(at(0.02)))).toBeGreaterThanOrEqual(0.2);
+      expect(Math.max(...net(at(0.49)))).toBeLessThan(0.3);
     });
 
     it('the moat tiles its art along the wall face, every other tile mirrored, faint once gone', () => {
