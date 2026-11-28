@@ -378,7 +378,9 @@ describe('the Roster and the bench (ID-147)', () => {
     // The Bench's tabs sit in a fold body (ID-256): its label is the body's previous sibling.
     const benchLabel = (list: HTMLElement) =>
       list.parentElement!.previousElementSibling as HTMLElement;
-    const patrolLabel = (patrols: HTMLElement) => patrols.previousElementSibling as HTMLElement;
+    // In a fold region like the Bench's, the title is the region's sibling.
+    const patrolLabel = (patrols: HTMLElement) =>
+      patrols.parentElement!.previousElementSibling as HTMLElement;
 
     it('Squad, Bench and On patrol rows, each counted apart; the card keeps its locks', () => {
       const m = mount(out([person(4), person(5, { rest: 1 }), person(6)], ['recruit-6']));

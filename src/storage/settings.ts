@@ -200,10 +200,12 @@ export function writeAirstrikeHintSeen(storage: SaveStorage | null): void {
   }
 }
 
-// The Roster's folds (ID-256): Bench and Details open or closed, kept in this browser. Only the
-// exact string "1" means closed; anything else (missing, odd, a throwing store) is open.
+// The Roster's folds (ID-256): Bench, On patrol and Details open or closed, kept in this
+// browser. Only the exact string "1" means closed; anything else (missing, odd, a throwing
+// store) is open.
 export const ROSTER_FOLD_KEYS = {
   bench: 'idle-defender.roster-bench-closed',
+  patrol: 'idle-defender.roster-patrol-closed',
   details: 'idle-defender.roster-details-closed',
 } as const;
 
@@ -218,7 +220,7 @@ export function readRosterFolds(storage: SaveStorage | null): Record<RosterFold,
       return false;
     }
   };
-  return { bench: closed('bench'), details: closed('details') };
+  return { bench: closed('bench'), patrol: closed('patrol'), details: closed('details') };
 }
 
 /** Keeps a section closed ("1") or open ("0"); where the browser refuses it, it is not kept. */

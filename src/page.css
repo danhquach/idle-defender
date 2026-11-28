@@ -5606,10 +5606,9 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   font-weight: 400;
 }
 
-/* Titles with no arrow (Squad, On patrol) sit where the arrowed ones' words do: the fold
-   header's inset, arrow and gap, less the box's padding. */
-.rv-squad-row .rv-tabs-label,
-.rv-box-patrol > .rv-tabs-label {
+/* The title with no arrow (Squad) sits where the arrowed ones' words do: the fold header's
+   inset, arrow and gap, less the box's padding. */
+.rv-squad-row .rv-tabs-label {
   padding-left: 20px;
 }
 
