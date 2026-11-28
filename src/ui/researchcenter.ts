@@ -1,10 +1,17 @@
 // The Research Center (ID-263): a chart of the Scrap upgrades, branches as rows and tiers
 // left to right, with a detail panel beside it, in a window of its own (a camp window with
-// one tab, "Upgrades"; cosmetics come as a second tab later). Browsing works any time; buying
+// two tabs, "Upgrades" and, since ID-284, "Ammo & throwables"). Browsing works any time; buying
 // only between hordes. The buying rules live in core/techtree.ts; this file is the view. Text
 // reaches the page only through textContent, and the connector lines are SVG built from the
 // table's numbers.
-import { TECH, TECH_BRANCHES, TECH_IDS, type TechId } from '../core/data.ts';
+import {
+  TECH,
+  TECH_IDS,
+  TECH_TABS,
+  type TechBranch,
+  type TechId,
+  type TechTab,
+} from '../core/data.ts';
 import type { GameState } from '../core/game.ts';
 import { techOf, techReady, techState, unlocksOf } from '../core/techtree.ts';
 import { createCampWindow } from './campwindow.ts';
@@ -15,8 +22,37 @@ import { refusedText, TECH_BRANCH_NAME, TECH_EFFECT, TECH_NAME, TECH_SHORT } fro
 /** Why Research is greyed in a fight. */
 export const RESEARCH_WAIT = 'Research between hordes';
 
-/** The tab's name with what is done: "Upgrades · 3/14". */
-export const upgradesLabel = (done: number, total: number): string => `Upgrades · ${done}/${total}`;
+/** Each tab's name (ID-284). */
+const TAB_NAME: Readonly<Record<TechTab, string>> = {
+  upgrades: 'Upgrades',
+  kit: 'Ammo & throwables',
+};
+const TABS = Object.keys(TECH_TABS) as TechTab[];
+
+/** The nodes the tab shows, in table order (each tab counts and draws its own). */
+export const tabNodes = (tab: TechTab): TechId[] =>
+  TECH_IDS.filter((id) => (TECH_TABS[tab] as readonly TechBranch[]).includes(TECH[id].branch));
+
+/** The tab's name with what is done: "Upgrades · 3/14", "Ammo & throwables · 0/15". */
+export const tabLabel = (tab: TechTab, done: number, total: number): string =>
+  `${TAB_NAME[tab]} · ${done}/${total}`;
+export const upgradesLabel = (done: number, total: number): string =>
+  tabLabel('upgrades', done, total);
+
+/** The label of a tab for what the game has researched. */
+const labelFor = (tab: TechTab, game: Pick<GameState, 'tech'>): string => {
+  const nodes = tabNodes(tab);
+  return tabLabel(tab, techOf(game).filter((id) => nodes.includes(id)).length, nodes.length);
+};
+
+/** The columns' headers (ID-284): the Upgrades tab's tiers, the other's Unlock then each Mk. */
+const COLUMN_NAME: Readonly<Record<TechTab, readonly string[]>> = {
+  upgrades: ['Tier 1', 'Tier 2', 'Tier 3', 'Tier 4'],
+  kit: ['Unlock', 'Mk II', 'Mk III'],
+};
+
+/** Where the starting pick is made (ID-284), over the chart of the second tab. */
+export const KIT_NOTE = 'Pick your starting ammo and throwable on the squad screen.';
 
 /** A node on the chart: ready (open and affordable), short of Scrap, bought, or locked. */
 export type NodeState = 'done' | 'open' | 'short' | 'locked';
@@ -75,10 +111,17 @@ export function researchOffer(
   };
 }
 
-/** The confirm before a purchase; a Tier 3 or Tier 4 node repeats what it does. */
+/**
+ * The confirm before a purchase; a Tier 3 or Tier 4 node repeats what it does, and so does every
+ * node of the Ammo & throwables tab, the unlocks too, and Hand-loads (ID-284).
+ */
 export const researchQuestion = (id: TechId, cost: number, scrap: number): string => {
   const node = TECH[id];
-  const effect = node.tier >= 3 ? `${TECH_EFFECT[id]} ` : '';
+  const repeats =
+    node.tier >= 3 ||
+    id === 'hand-loads' ||
+    (TECH_TABS.kit as readonly TechBranch[]).includes(node.branch);
+  const effect = repeats ? `${TECH_EFFECT[id]} ` : '';
   return `Research ${TECH_NAME[id]} for ${thousands(cost)} Scrap? ${effect}You have ${thousands(scrap)}.`;
 };
 
@@ -150,26 +193,31 @@ export function connectors(
   doc: Document,
   have: readonly TechId[] = [],
   active: TechId | null = null,
+  tab: TechTab = 'upgrades',
 ): SVGSVGElement {
+  const branches: readonly TechBranch[] = TECH_TABS[tab];
+  const nodes = tabNodes(tab);
   const svg = doc.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('class', 'research-lines');
-  svg.setAttribute('viewBox', `0 0 4 ${TECH_BRANCHES.length}`);
+  svg.setAttribute('viewBox', `0 0 ${COLUMN_NAME[tab].length} ${branches.length}`);
   svg.setAttribute('preserveAspectRatio', 'none');
   svg.setAttribute('aria-hidden', 'true');
-  const rowOf = (id: TechId): number => TECH_BRANCHES.indexOf(TECH[id].branch);
+  const rowOf = (id: TechId): number => branches.indexOf(TECH[id].branch);
   // The bent combo lines, deepest target first, each given its trunk.
-  const bent = TECH_IDS.flatMap((id) =>
-    TECH[id].tier === 4
-      ? TECH[id].needs
-          .filter((from) => rowOf(from) !== rowOf(id))
-          .map((from) => [from, id] as const)
-      : [],
-  ).sort((p, q) => rowOf(q[1]) - rowOf(p[1]));
+  const bent = nodes
+    .flatMap((id) =>
+      TECH[id].tier === 4
+        ? TECH[id].needs
+            .filter((from) => rowOf(from) !== rowOf(id))
+            .map((from) => [from, id] as const)
+        : [],
+    )
+    .sort((p, q) => rowOf(q[1]) - rowOf(p[1]));
   const trunkOf = (from: TechId, to: TechId): number => {
     const i = bent.findIndex(([f, t]) => f === from && t === to);
     return 3 + (i - (bent.length - 1) / 2) * TRUNK;
   };
-  for (const id of TECH_IDS) {
+  for (const id of nodes) {
     const { needs, tier } = TECH[id];
     const row = rowOf(id);
     for (const from of needs) {
@@ -215,8 +263,6 @@ export function createResearchCenter(root: HTMLElement, opts: ResearchOptions): 
   const doc = root.ownerDocument;
   const win = createCampWindow(root);
   if (opts.onChange) win.onChange(opts.onChange);
-  let opened = false;
-  let selected: TechId | null = null;
   let drawn: { game: GameState; can: boolean } | null = null;
 
   const button = el('button', 'research-button');
@@ -231,39 +277,56 @@ export function createResearchCenter(root: HTMLElement, opts: ResearchOptions): 
   button.addEventListener('click', () => win.open('upgrades', button));
   root.append(button);
 
-  const pane = el('div', 'research-body');
-  const chart = el('div', 'research-chart');
-  chart.setAttribute('role', 'group');
-  chart.setAttribute('aria-label', 'Upgrade chart');
-  const detail = el('section', 'research-detail');
-  detail.setAttribute('aria-live', 'polite');
-  // The chart scrolls sideways in a narrow window, the detail panel stays put.
-  const scroll = el('div', 'research-scroll');
-  scroll.append(chart);
-  pane.append(scroll, detail);
-  // A fade at the chart's inline end while more of it is out of sight (a phone).
-  const cue = (): void => {
-    scroll.dataset.more = String(scroll.scrollLeft + scroll.clientWidth < scroll.scrollWidth - 2);
-  };
-  scroll.addEventListener('scroll', cue);
-  doc.defaultView?.addEventListener('resize', cue);
-  const status = el('p', 'menu-note inv-status research-status');
-  status.setAttribute('role', 'status');
-  const say = (text: string, refused = false): void => {
-    if (refused) status.dataset.tone = 'refused';
-    else delete status.dataset.tone;
-    status.textContent = text;
+  /** One tab: its chart (its own nodes, rows and columns), detail panel and status line. */
+  interface View {
+    tab: TechTab;
+    nodes: TechId[];
+    pane: HTMLElement;
+    chart: HTMLElement;
+    detail: HTMLElement;
+    scroll: HTMLElement;
+    status: HTMLElement;
+    selected: TechId | null;
+  }
+  const views = {} as Record<TechTab, View>;
+  for (const tab of TABS) {
+    const pane = el('div', 'research-body');
+    const chart = el('div', 'research-chart');
+    chart.dataset.tab = tab;
+    chart.setAttribute('role', 'group');
+    chart.setAttribute('aria-label', tab === 'kit' ? 'Ammo and throwables chart' : 'Upgrade chart');
+    const detail = el('section', 'research-detail');
+    detail.setAttribute('aria-live', 'polite');
+    // The chart scrolls sideways in a narrow window, the detail panel stays put.
+    const scroll = el('div', 'research-scroll');
+    if (tab === 'kit') scroll.append(el('p', 'menu-note research-kit-note', KIT_NOTE));
+    scroll.append(chart);
+    pane.append(scroll, detail);
+    // A fade at the chart's inline end while more of it is out of sight (a phone).
+    const cue = (): void => {
+      scroll.dataset.more = String(scroll.scrollLeft + scroll.clientWidth < scroll.scrollWidth - 2);
+    };
+    scroll.addEventListener('scroll', cue);
+    doc.defaultView?.addEventListener('resize', cue);
+    const status = el('p', 'menu-note inv-status research-status');
+    status.setAttribute('role', 'status');
+    views[tab] = { tab, nodes: tabNodes(tab), pane, chart, detail, scroll, status, selected: null };
+  }
+  const say = (v: View, text: string, refused = false): void => {
+    if (refused) v.status.dataset.tone = 'refused';
+    else delete v.status.dataset.tone;
+    v.status.textContent = text;
   };
 
-  function pick(id: TechId): void {
-    selected = id;
-    draw();
-    chart.querySelector<HTMLElement>(`[data-id="${id}"]`)?.focus({ preventScroll: true });
+  function pick(v: View, id: TechId): void {
+    v.selected = id;
+    draw(v);
+    v.chart.querySelector<HTMLElement>(`[data-id="${id}"]`)?.focus({ preventScroll: true });
   }
 
-  /** Lights the combo lines that touch `id`; the rest stay faint. */
-  function mark(id: TechId | null): void {
-    for (const l of chart.querySelectorAll<SVGElement>('[data-combo]')) {
+  /** Lights the combo lines that touch a node; the rest stay faint. */
+  function mark(v: View, id: TechId | null): void {
+    for (const l of v.chart.querySelectorAll<SVGElement>('[data-combo]')) {
       l.dataset.active = String(id !== null && (l.dataset.from === id || l.dataset.to === id));
     }
   }
@@ -285,18 +348,19 @@ export function createResearchCenter(root: HTMLElement, opts: ResearchOptions): 
     return face;
   }
 
-  function drawChart(game: GameState): void {
-    const nodes: Element[] = [connectors(doc, techOf(game), selected)];
-    for (let t = 1; t <= 4; t++) {
-      const head = el('span', 'research-tier', `Tier ${t}`);
-      head.style.gridColumn = String(t + 1);
+  function drawChart(v: View, game: GameState): void {
+    const branches: readonly TechBranch[] = TECH_TABS[v.tab];
+    const nodes: Element[] = [connectors(doc, techOf(game), v.selected, v.tab)];
+    COLUMN_NAME[v.tab].forEach((name, i) => {
+      const head = el('span', 'research-tier', name);
+      head.style.gridColumn = String(i + 2);
       nodes.push(head);
-    }
-    TECH_BRANCHES.forEach((branch, row) => {
+    });
+    branches.forEach((branch, row) => {
       const label = el('span', 'research-branch', TECH_BRANCH_NAME[branch]);
       label.style.gridRow = String(row + 2);
       nodes.push(label);
-      for (const id of TECH_IDS.filter((t) => TECH[t].branch === branch)) {
+      for (const id of v.nodes.filter((t) => TECH[t].branch === branch)) {
         const node = TECH[id];
         const face = nodeFace(game, id);
         const b = el('button', 'research-node');
@@ -307,23 +371,24 @@ export function createResearchCenter(root: HTMLElement, opts: ResearchOptions): 
         if (node.tier === 4) b.dataset.combo = 'true';
         b.style.gridRow = String(row + 2);
         b.style.gridColumn = String(node.tier + 1);
-        b.setAttribute('aria-pressed', String(id === selected));
+        b.setAttribute('aria-pressed', String(id === v.selected));
         b.append(el('span', 'research-node-name', TECH_NAME[id]), faceEl(face.text));
-        b.addEventListener('click', () => pick(id));
+        b.addEventListener('click', () => pick(v, id));
         // A combo's lines light up while its node (or a parent) is hovered or focused.
-        for (const on of ['pointerenter', 'focus'] as const) b.addEventListener(on, () => mark(id));
+        for (const on of ['pointerenter', 'focus'] as const)
+          b.addEventListener(on, () => mark(v, id));
         for (const off of ['pointerleave', 'blur'] as const)
-          b.addEventListener(off, () => mark(selected));
+          b.addEventListener(off, () => mark(v, v.selected));
         nodes.push(b);
       }
     });
-    chart.replaceChildren(...nodes);
-    cue();
+    v.chart.replaceChildren(...nodes);
+    v.scroll.dispatchEvent(new Event('scroll'));
   }
 
-  function drawDetail(game: GameState, can: boolean): void {
-    if (selected === null) return;
-    const node = TECH[selected];
+  function drawDetail(v: View, game: GameState, can: boolean): void {
+    if (v.selected === null) return;
+    const node = TECH[v.selected];
     const have = techOf(game);
     const branch = TECH_BRANCH_NAME[node.branch];
     const needs = el('p', 'research-needs');
@@ -339,7 +404,7 @@ export function createResearchCenter(root: HTMLElement, opts: ResearchOptions): 
         );
       });
     }
-    const next = unlocksOf(selected);
+    const next = unlocksOf(v.selected);
     const unlocks = el(
       'p',
       'research-unlocks',
@@ -347,11 +412,15 @@ export function createResearchCenter(root: HTMLElement, opts: ResearchOptions): 
         ? 'Unlocks: nothing yet'
         : `Unlocks: ${next.map((t) => TECH_NAME[t]).join(', ')}`,
     );
-    const offer = researchOffer(game, selected, can);
+    const offer = researchOffer(game, v.selected, can);
     const parts: HTMLElement[] = [
-      el('h3', 'research-name', TECH_NAME[selected]),
-      el('p', 'research-meta', `Tier ${node.tier} · ${branch}`),
-      el('p', 'research-effect', TECH_EFFECT[selected]),
+      el('h3', 'research-name', TECH_NAME[v.selected]),
+      el(
+        'p',
+        'research-meta',
+        `${v.tab === 'kit' ? COLUMN_NAME.kit[node.tier - 1]! : `Tier ${node.tier}`} · ${branch}`,
+      ),
+      el('p', 'research-effect', TECH_EFFECT[v.selected]),
       needs,
       unlocks,
     ];
@@ -362,52 +431,64 @@ export function createResearchCenter(root: HTMLElement, opts: ResearchOptions): 
       go.type = 'button';
       go.disabled = offer.disabled;
       go.title = offer.title;
-      const id = selected;
-      go.addEventListener('click', () => void buy(id));
+      const id = v.selected;
+      go.addEventListener('click', () => void buy(v, id));
       parts.push(go);
       if (offer.wait) parts.push(el('p', 'research-wait', offer.wait));
     }
-    detail.replaceChildren(...parts);
+    v.detail.replaceChildren(...parts);
   }
 
-  function draw(): void {
+  /** Each tab's name with its count. */
+  function relabel(game: GameState): void {
+    for (const tab of TABS) win.relabel(tab, labelFor(tab, game));
+  }
+
+  function draw(v: View): void {
     const { game, canBuy } = opts.state();
     drawn = { game, can: canBuy };
     // First time on show: the first node that can be bought, else the first node.
-    selected ??= TECH_IDS.find((id) => techState(game, id) === 'open') ?? TECH_IDS[0]!;
-    drawChart(game);
-    drawDetail(game, canBuy);
-    win.relabel('upgrades', upgradesLabel(techOf(game).length, TECH_IDS.length));
+    v.selected ??= v.nodes.find((id) => techState(game, id) === 'open') ?? v.nodes[0]!;
+    drawChart(v, game);
+    drawDetail(v, game, canBuy);
+    relabel(game);
   }
 
-  async function buy(id: TechId): Promise<void> {
+  async function buy(v: View, id: TechId): Promise<void> {
     const answer = await opts.onResearch(id);
     if (answer === null) return;
-    say(answer.ok ? answer.text : refusedText(answer), !answer.ok);
-    if (opened) draw();
+    say(v, answer.ok ? answer.text : refusedText(answer), !answer.ok);
+    if (win.isOpen()) draw(v);
   }
 
-  win.add({
-    id: 'upgrades',
-    label: upgradesLabel(0, TECH_IDS.length),
-    panel: pane,
-    status,
-    button,
-    show() {
-      opened = true;
-      say('');
-      draw();
-      win.setResumes(opts.state().resumes);
-    },
-    hide() {
-      opened = false;
-    },
-  });
+  /** The tab on show, or null with the window closed. */
+  const shownView = (): View | null => {
+    const id = win.current();
+    return id !== null && Object.hasOwn(views, id) ? views[id as TechTab] : null;
+  };
+
+  const game0 = opts.state().game;
+  for (const tab of TABS) {
+    const v = views[tab];
+    win.add({
+      id: tab,
+      label: labelFor(tab, game0),
+      panel: v.pane,
+      status: v.status,
+      button,
+      show() {
+        say(v, '');
+        draw(v);
+        win.setResumes(opts.state().resumes);
+      },
+      hide() {},
+    });
+  }
 
   return {
     button,
     dialog: win.dialog,
-    isOpen: () => opened,
+    isOpen: () => win.isOpen(),
     open(from) {
       win.open('upgrades', from);
     },
@@ -422,11 +503,12 @@ export function createResearchCenter(root: HTMLElement, opts: ResearchOptions): 
         button.title = name;
       }
       button.dataset.ready = String(ready);
-      win.relabel('upgrades', upgradesLabel(techOf(game).length, TECH_IDS.length));
-      if (!opened) return;
+      relabel(game);
+      const v = shownView();
+      if (!v) return;
       win.setResumes(resumes);
       if (drawn && game === drawn.game && canBuy === drawn.can) return;
-      draw();
+      draw(v);
     },
   };
 }

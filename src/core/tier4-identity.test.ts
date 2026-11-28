@@ -47,8 +47,9 @@ const RECORDED: Record<string, [string, number]> = {
   'bare-h4': ['d85f9384:5351', 1257596436],
   'bare-h9': ['47589016:6529', 199658554],
   'empty-h9': ['47589016:6529', 199658554],
-  'tier13-h4': ['7a3365d3:5545', 1257596436],
-  'tier13-h9': ['af229730:6721', 199658554],
+  // ID-284: Hand-loads is now the first-round crit, so the two arms that research it moved (Node 25).
+  'tier13-h4': ['4deede3a:5571', 1393055130],
+  'tier13-h9': ['a71d5a58:6717', 32979954],
 };
 
 /**
@@ -59,7 +60,8 @@ const NODE_22: Record<string, [string, number]> = {
   // ID-287: taken from the branch on CI after the re-record.
   'bare-h9': ['403a5c4c:6524', 199658554],
   'empty-h9': ['403a5c4c:6524', 199658554],
-  'tier13-h9': ['cc246778:6716', 199658554],
+  // ID-284: taken from the branch on CI (Hand-loads researched).
+  'tier13-h9': ['21108b0a:6712', 32979954],
 };
 
 /** Node's major version: picks the digests recorded on that runtime. */

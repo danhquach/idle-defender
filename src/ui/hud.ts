@@ -29,6 +29,7 @@ import {
   type Survivor,
 } from '../core/camp.ts';
 import { AMMO_CARDS, bansLeft, rerollsLeft, UPGRADE_IDS, UPGRADES } from '../core/cards.ts';
+import { techOf } from '../core/techtree.ts';
 import {
   BANK_CAP,
   BOSS_SKILL,
@@ -105,6 +106,8 @@ import {
   isFit,
   isReplay,
   joiningOf,
+  kitCards,
+  kitOf,
   paramedicPoints,
   atCamp,
   dropGuns,
@@ -117,6 +120,7 @@ import {
   squadSize,
   squadSpec,
   stashCap,
+  type KitSlot,
   squadResult,
   survivorPower,
   upgradeCost,
@@ -174,6 +178,11 @@ import {
   traitName,
   CAMP_PICK_NAME,
   CAMP_PICK_TEXT,
+  KIT_LABEL,
+  KIT_NONE,
+  KIT_RULE,
+  kitEffect,
+  kitName,
 } from './text/index.ts';
 import {
   hordeKindHp,
@@ -758,6 +767,53 @@ export function skillPicker(pick: readonly SkillId[]): SkillPick {
           ? ''
           : `${pick.length} of ${SQUAD_SKILLS.max} picked`,
   };
+}
+
+/** One card the starting pick can hold (ID-284). */
+export interface KitChoice {
+  card: UpgradeId;
+  /** The card's name with its Mk: "Incendiary Rounds · Mk II". */
+  name: string;
+  /** Its effect at Lv 1, with the Mk's numbers. */
+  detail: string;
+  icon: ArtId;
+  picked: boolean;
+}
+
+/** One slot of the starting pick (ID-284): its button, the card it holds and the cards it can. */
+export interface KitSlotPick {
+  slot: KitSlot;
+  /** "Start with: Ammo". */
+  label: string;
+  picked: KitChoice | null;
+  options: KitChoice[];
+}
+
+/** The starting pick before a horde (ID-284): a button per slot with something unlocked. */
+export interface KitPick {
+  slots: KitSlotPick[];
+  /** The line heading each list: what the slot rule does in a fight. */
+  rule: string;
+}
+
+/** The starting pick as the squad screen shows it; none while nothing is unlocked. */
+export function kitPicker(game: Pick<GameState, 'tech' | 'kit'>): KitPick | undefined {
+  const tech = techOf(game);
+  const kit = kitOf(game);
+  const slots = (['ammo', 'throwable'] as const).flatMap((slot): KitSlotPick[] => {
+    const options = kitCards(game, slot).map((card): KitChoice => ({
+      card,
+      name: kitName(tech, card),
+      detail: kitEffect(tech, card),
+      icon: CARD_ICON[card],
+      picked: kit[slot] === card,
+    }));
+    if (options.length === 0) return [];
+    return [
+      { slot, label: KIT_LABEL[slot], picked: options.find((o) => o.picked) ?? null, options },
+    ];
+  });
+  return slots.length > 0 ? { slots, rule: KIT_RULE } : undefined;
 }
 
 /** The skills as the help texts tell them (ID-193): how many may be picked and their keys. */
@@ -1414,6 +1470,8 @@ export interface ResultScreen {
   picker?: HordePicker;
   /** The skill pick for the next horde (ID-100), horde-only. */
   skills?: SkillPick;
+  /** The starting pick for the next horde (ID-284), horde-only; none until something is unlocked. */
+  kit?: KitPick;
   /**
    * Camp-level picks and the offers to pick from before "Back to build" (design §11),
    * with the room left after the horde for a survivor to join.
@@ -2368,6 +2426,7 @@ export function squadStart(game: GameState, picked: number = localHorde(game)): 
     squad: true,
     picker,
     skills: skillPicker(game.skillPick),
+    kit: kitPicker(game),
     camp: noCamp(game),
     debrief: {
       kind: 'start',
@@ -2653,6 +2712,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
       squad: true,
       picker,
       skills: skillPicker(game.skillPick),
+      kit: kitPicker(game),
       camp: noCamp(game),
       debrief: {
         kind: 'won',
@@ -2747,6 +2807,7 @@ export function squadScreen(game: GameState, s: HordeState): ResultScreen {
     squad: true,
     picker,
     skills: skillPicker(game.skillPick),
+    kit: kitPicker(game),
     camp: noCamp(game),
     debrief: {
       kind: 'lost',
@@ -2834,6 +2895,10 @@ export function createHud(
   onSkillPick(handler: (skill: SkillId) => void): void;
   /** The skill pick redrawn (ID-100) once the app has saved a toggle. */
   showSkills(pick: SkillPick): void;
+  /** Where a starting card picked from a slot's list goes (null: None); the app sets it once (ID-284). */
+  onKitPick(handler: (slot: KitSlot, card: UpgradeId | null) => void): void;
+  /** The starting pick redrawn (ID-284) once the app has saved a choice. */
+  showKit(pick: KitPick | undefined): void;
   /** Where an Accept or Refuse on the offer tile goes (ID-150); the app sets it once. */
   onJoin(handler: (id: string, accept: boolean) => void): void;
   /**
@@ -3152,8 +3217,20 @@ export function createHud(
   skillBlock.setAttribute('role', 'group');
   skillBlock.hidden = true;
   let onPickSkill: (skill: SkillId) => void = () => {};
+  // The starting pick for the next horde (ID-284): a button per slot, beside the skills; its list
+  // sits on the hud root (the panel clips and, on a short window, transforms what is inside it).
+  const kitBlock = el('div', 'hud-kit-pick');
+  kitBlock.setAttribute('role', 'group');
+  kitBlock.setAttribute('aria-label', 'Starting cards');
+  kitBlock.hidden = true;
+  const kitList = el('div', 'hud-kit-list');
+  kitList.setAttribute('role', 'listbox');
+  kitList.hidden = true;
+  root.append(kitList);
+  let onPickKit: (slot: KitSlot, card: UpgradeId | null) => void = () => {};
+  let openKit: KitSlot | null = null;
   const startRow = el('div', 'hud-start-row');
-  startRow.append(skillBlock, back);
+  startRow.append(skillBlock, kitBlock, back);
   foot.append(pickBlock, startRow);
   let onPickHorde: (horde: number) => void = () => {};
   let onPickMode: (mode: Mode) => void = () => {};
@@ -3703,6 +3780,154 @@ export function createHud(
       ...chipNodes(chips.filter(isTag)),
       ...(details ? [detailsButton('debrief-details', DETAILS)] : []),
     );
+  }
+
+  /** Puts the starting pick's list away; the keyboard goes back to its button with `refocus`. */
+  function closeKit(refocus = false): void {
+    if (openKit === null) return;
+    const slot = openKit;
+    openKit = null;
+    kitList.hidden = true;
+    kitList.replaceChildren();
+    for (const b of kitBlock.querySelectorAll<HTMLButtonElement>('.hud-kit-button')) {
+      b.setAttribute('aria-expanded', 'false');
+    }
+    if (refocus) kitBlock.querySelector<HTMLButtonElement>(`[data-slot="${slot}"]`)?.focus();
+  }
+
+  /** Opens the list of `s`'s cards over its button: the rule, None, then each unlocked card. */
+  function openKitList(s: KitSlotPick, rule: string, anchor: HTMLButtonElement): void {
+    closeKit();
+    openKit = s.slot;
+    anchor.setAttribute('aria-expanded', 'true');
+    kitList.setAttribute('aria-label', s.label);
+    const choose = (card: UpgradeId | null): void => {
+      if (result.hidden) return;
+      closeKit(true);
+      onPickKit(s.slot, card);
+    };
+    const option = (
+      card: UpgradeId | null,
+      name: string,
+      detail: string,
+      icon: ArtId | null,
+      picked: boolean,
+    ): HTMLButtonElement => {
+      const b = el('button', 'hud-kit-option');
+      b.type = 'button';
+      b.setAttribute('role', 'option');
+      b.setAttribute('aria-selected', String(picked));
+      b.dataset.card = card ?? '';
+      if (icon) {
+        const img = el('img', 'hud-icon hud-kit-icon');
+        img.src = ART_URLS[icon] ?? '';
+        img.alt = '';
+        b.append(img);
+      } else {
+        const none = el('span', 'hud-kit-icon hud-kit-empty');
+        none.setAttribute('aria-hidden', 'true');
+        b.append(none);
+      }
+      const text = el('span', 'hud-kit-option-text');
+      text.append(el('span', 'hud-kit-option-name', name));
+      if (detail) text.append(el('span', 'hud-kit-option-detail', detail));
+      b.append(text);
+      b.addEventListener('click', () => choose(card));
+      return b;
+    };
+    const items = [
+      option(null, KIT_NONE, '', null, s.picked === null),
+      ...s.options.map((o) => option(o.card, o.name, o.detail, o.icon, o.picked)),
+    ];
+    kitList.replaceChildren(el('p', 'hud-kit-rule', rule), ...items);
+    // Off the phone shell the list floats over its button, kept inside the window; on it the
+    // CSS makes it a sheet between the rails.
+    if (isShortTouch(window)) kitList.removeAttribute('style');
+    else {
+      const r = anchor.getBoundingClientRect();
+      const width = Math.min(340, window.innerWidth - 16);
+      kitList.style.width = `${width}px`;
+      kitList.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - width - 8))}px`;
+      kitList.style.bottom = `${Math.max(8, window.innerHeight - r.top + 6)}px`;
+      kitList.style.maxHeight = `${Math.max(120, r.top - 14)}px`;
+    }
+    kitList.hidden = false;
+    (items.find((b) => b.getAttribute('aria-selected') === 'true') ?? items[0]!).focus({
+      preventScroll: true,
+    });
+  }
+
+  kitList.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      // Only the list: a window or panel under it stays as it is.
+      e.preventDefault();
+      e.stopPropagation();
+      closeKit(true);
+      return;
+    }
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    const items = [...kitList.querySelectorAll<HTMLButtonElement>('.hud-kit-option')];
+    const at = items.indexOf(document.activeElement as HTMLButtonElement);
+    const next = e.key === 'ArrowDown' ? at + 1 : at - 1;
+    items[(next + items.length) % items.length]?.focus();
+  });
+  // A press anywhere else puts the list away.
+  document.addEventListener('pointerdown', (e) => {
+    if (openKit === null) return;
+    const at = e.target as Node | null;
+    if (at && (kitList.contains(at) || kitBlock.contains(at))) return;
+    closeKit();
+  });
+
+  /**
+   * The starting pick (ID-284), beside the skills: a button per slot with something unlocked,
+   * showing the picked card's icon and name or "None"; a press opens its list. On the phone
+   * shell the button is its icon (the words stay for a screen reader). None unlocked: hidden.
+   */
+  function drawKit(p: KitPick | undefined): void {
+    const had = kitBlock.contains(document.activeElement)
+      ? (document.activeElement as HTMLElement).dataset.slot
+      : undefined;
+    closeKit();
+    kitBlock.hidden = p === undefined || p.slots.length === 0;
+    if (!p) {
+      kitBlock.replaceChildren();
+      return;
+    }
+    kitBlock.replaceChildren(
+      ...p.slots.map((s) => {
+        const b = el('button', 'hud-kit-button');
+        b.type = 'button';
+        b.dataset.slot = s.slot;
+        b.dataset.state = s.picked ? 'set' : 'none';
+        b.setAttribute('aria-haspopup', 'listbox');
+        b.setAttribute('aria-expanded', 'false');
+        const now = s.picked?.name ?? KIT_NONE;
+        b.setAttribute('aria-label', `${s.label}: ${now}`);
+        b.title = s.picked ? s.picked.detail : s.label;
+        if (s.picked) {
+          const img = el('img', 'hud-icon hud-kit-icon');
+          img.src = ART_URLS[s.picked.icon] ?? '';
+          img.alt = '';
+          b.append(img);
+        } else {
+          const none = el('span', 'hud-kit-icon hud-kit-empty');
+          none.setAttribute('aria-hidden', 'true');
+          b.append(none);
+        }
+        const text = el('span', 'hud-kit-text');
+        text.append(el('span', 'hud-kit-label', s.label), el('span', 'hud-kit-card', now));
+        b.append(text);
+        b.addEventListener('click', () => {
+          if (result.hidden) return;
+          if (openKit === s.slot) closeKit();
+          else openKitList(s, p.rule, b);
+        });
+        return b;
+      }),
+    );
+    if (had) kitBlock.querySelector<HTMLButtonElement>(`[data-slot="${had}"]`)?.focus();
   }
 
   /**
@@ -4642,6 +4867,7 @@ export function createHud(
       back.textContent = screen.button;
       drawPicker(screen.picker);
       drawSkills(screen.skills);
+      drawKit(screen.kit);
       campBlock(screen.camp);
       result.hidden = false;
       if (squad) shop.hidden = true;
@@ -4667,6 +4893,12 @@ export function createHud(
     },
     onSkillPick(handler) {
       onPickSkill = handler;
+    },
+    onKitPick(handler) {
+      onPickKit = handler;
+    },
+    showKit(next) {
+      if (!result.hidden) drawKit(next);
     },
     onJoin(handler) {
       onAnswerJoin = handler;

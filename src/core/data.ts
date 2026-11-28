@@ -2496,11 +2496,44 @@ export const TECH_IDS = [
   'wall-machine-gun',
   'shock-net',
   'tar-moat',
+  // Ammo and throwables (ID-284): per card an unlock (its id is the card's), then Mk II and Mk III.
+  'incendiary-rounds',
+  'incendiary-rounds-mk2',
+  'incendiary-rounds-mk3',
+  'shock-rounds',
+  'shock-rounds-mk2',
+  'shock-rounds-mk3',
+  'frag-grenades',
+  'frag-grenades-mk2',
+  'frag-grenades-mk3',
+  'flashbang',
+  'flashbang-mk2',
+  'flashbang-mk3',
+  'molotov',
+  'molotov-mk2',
+  'molotov-mk3',
 ] as const;
 export type TechId = (typeof TECH_IDS)[number];
-export type TechBranch = 'wall' | 'wire' | 'ammo' | 'mortars';
+export type TechBranch =
+  'wall' | 'wire' | 'ammo' | 'mortars' | 'incendiary' | 'shock' | 'frag' | 'flashbang' | 'molotov';
 /** The chart's rows, top to bottom (their names are `TECH_BRANCH_NAME`, ui/text/names.ts). */
-export const TECH_BRANCHES: readonly TechBranch[] = ['wall', 'wire', 'ammo', 'mortars'];
+export const TECH_BRANCHES: readonly TechBranch[] = [
+  'wall',
+  'wire',
+  'ammo',
+  'mortars',
+  'incendiary',
+  'shock',
+  'frag',
+  'flashbang',
+  'molotov',
+];
+/** The Research window's tabs (ID-284) and the branches each one's chart shows as rows, in order. */
+export const TECH_TABS = {
+  upgrades: ['wall', 'wire', 'ammo', 'mortars'],
+  kit: ['incendiary', 'shock', 'frag', 'flashbang', 'molotov'],
+} as const satisfies Record<string, readonly TechBranch[]>;
+export type TechTab = keyof typeof TECH_TABS;
 /** A node's numbers; its name and effect words are `TECH_NAME` / `TECH_EFFECT` (ui/text/names.ts). */
 export interface TechNode {
   branch: TechBranch;
@@ -2510,7 +2543,7 @@ export interface TechNode {
   /** The nodes that all have to be researched first, the same-row parent first; none for a Tier 1 node. */
   needs: readonly TechId[];
 }
-/** The nodes, one per id; the Scrap costs add up to 25,800 (Tiers 1 to 3: 9,300). */
+/** The nodes, one per id; the Scrap costs add up to 47,600 (Tiers 1 to 3: 9,300; ammo and throwables 21,800). */
 export const TECH: Readonly<Record<TechId, TechNode>> = {
   'reinforced-wall': {
     branch: 'wall',
@@ -2596,6 +2629,96 @@ export const TECH: Readonly<Record<TechId, TechNode>> = {
     cost: 5000,
     needs: ['napalm-mortar', 'spiked-wall'],
   },
+  'incendiary-rounds': {
+    branch: 'incendiary',
+    tier: 1,
+    cost: 500,
+    needs: [],
+  },
+  'incendiary-rounds-mk2': {
+    branch: 'incendiary',
+    tier: 2,
+    cost: 1000,
+    needs: ['incendiary-rounds'],
+  },
+  'incendiary-rounds-mk3': {
+    branch: 'incendiary',
+    tier: 3,
+    cost: 2500,
+    needs: ['incendiary-rounds-mk2'],
+  },
+  'shock-rounds': {
+    branch: 'shock',
+    tier: 1,
+    cost: 500,
+    needs: [],
+  },
+  'shock-rounds-mk2': {
+    branch: 'shock',
+    tier: 2,
+    cost: 1000,
+    needs: ['shock-rounds'],
+  },
+  'shock-rounds-mk3': {
+    branch: 'shock',
+    tier: 3,
+    cost: 2500,
+    needs: ['shock-rounds-mk2'],
+  },
+  'frag-grenades': {
+    branch: 'frag',
+    tier: 1,
+    cost: 800,
+    needs: [],
+  },
+  'frag-grenades-mk2': {
+    branch: 'frag',
+    tier: 2,
+    cost: 1500,
+    needs: ['frag-grenades'],
+  },
+  'frag-grenades-mk3': {
+    branch: 'frag',
+    tier: 3,
+    cost: 3500,
+    needs: ['frag-grenades-mk2'],
+  },
+  flashbang: {
+    branch: 'flashbang',
+    tier: 1,
+    cost: 500,
+    needs: [],
+  },
+  'flashbang-mk2': {
+    branch: 'flashbang',
+    tier: 2,
+    cost: 1000,
+    needs: ['flashbang'],
+  },
+  'flashbang-mk3': {
+    branch: 'flashbang',
+    tier: 3,
+    cost: 2500,
+    needs: ['flashbang-mk2'],
+  },
+  molotov: {
+    branch: 'molotov',
+    tier: 1,
+    cost: 500,
+    needs: [],
+  },
+  'molotov-mk2': {
+    branch: 'molotov',
+    tier: 2,
+    cost: 1000,
+    needs: ['molotov'],
+  },
+  'molotov-mk3': {
+    branch: 'molotov',
+    tier: 3,
+    cost: 2500,
+    needs: ['molotov-mk2'],
+  },
 };
 /** The card a Tier 4 node puts in the fight's pool (ID-264); its id is the node's. */
 export const TECH_CARD = {
@@ -2614,13 +2737,26 @@ export const TECH_FX = {
   wireHp: 1.5,
   /** Electric Wire's stun in seconds (the immunity after it is the Flashbang's). */
   shockSeconds: 1,
-  /** Hand-loads' factor on an ammo card's number, and Armour-piercing's share of armour ignored. */
-  ammo: 1.1,
+  /** Armour-piercing's share of armour ignored. */
   pierce: 0.2,
   /** Quick Mortars' seconds between Oil Bombs, and Wide Slick's radius factor. */
   oilEvery: 16,
   slick: 1.25,
-  /** The cards the Ammo branch strengthens. */
+  /**
+   * Mk II and Mk III (ID-284), the highest counts: a factor on Incendiary's burn, Shock's paralysis,
+   * Frag's burst and Molotov's fire damage; Flashbang's extra stun seconds; Mk III's wider reach (a
+   * factor on Frag's burst, Flashbang's landing circle) and Molotov's extra fire seconds.
+   */
+  mk: {
+    burn: [1.15, 1.3],
+    shock: [1.15, 1.3],
+    frag: [1.15, 1.3],
+    fire: [1.15, 1.3],
+    stun: [0.5, 1],
+    reach: 1.1,
+    fireSeconds: 1,
+  },
+  /** The cards the Ammo branch strengthens (Armour-piercing acts while one is held; they get offer weight). */
   ammoCards: [
     'hollow-points',
     'incendiary-rounds',

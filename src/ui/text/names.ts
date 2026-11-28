@@ -4,6 +4,8 @@
 import { MODE_UNLOCK_HORDE, modeBefore, type Mode } from '../../core/modes.ts';
 import {
   CARD,
+  TECH_FX,
+  TOP_CRIT,
   AREAS,
   DANGERS,
   ENEMY_TRAITS,
@@ -294,6 +296,21 @@ export const TECH_NAME: Readonly<Record<TechId, string>> = {
   'wall-machine-gun': 'Wall Machine Gun',
   'shock-net': 'Shock Net',
   'tar-moat': 'Tar Moat',
+  'incendiary-rounds': 'Incendiary Rounds',
+  'incendiary-rounds-mk2': 'Incendiary Mk II',
+  'incendiary-rounds-mk3': 'Incendiary Mk III',
+  'shock-rounds': 'Shock Rounds',
+  'shock-rounds-mk2': 'Shock Mk II',
+  'shock-rounds-mk3': 'Shock Mk III',
+  'frag-grenades': 'Frag Grenades',
+  'frag-grenades-mk2': 'Frag Mk II',
+  'frag-grenades-mk3': 'Frag Mk III',
+  flashbang: 'Flashbang',
+  'flashbang-mk2': 'Flashbang Mk II',
+  'flashbang-mk3': 'Flashbang Mk III',
+  molotov: 'Molotov',
+  'molotov-mk2': 'Molotov Mk II',
+  'molotov-mk3': 'Molotov Mk III',
 };
 
 /** Each node in one word, for a Tier 4 combo's locked face ("Needs Armour + Spiked"; ID-264). */
@@ -312,9 +329,33 @@ export const TECH_SHORT: Readonly<Record<TechId, string>> = {
   'wall-machine-gun': 'Gun',
   'shock-net': 'Net',
   'tar-moat': 'Moat',
+  'incendiary-rounds': 'Incendiary',
+  'incendiary-rounds-mk2': 'Incendiary Mk II',
+  'incendiary-rounds-mk3': 'Incendiary Mk III',
+  'shock-rounds': 'Shock',
+  'shock-rounds-mk2': 'Shock Mk II',
+  'shock-rounds-mk3': 'Shock Mk III',
+  'frag-grenades': 'Frag',
+  'frag-grenades-mk2': 'Frag Mk II',
+  'frag-grenades-mk3': 'Frag Mk III',
+  flashbang: 'Flashbang',
+  'flashbang-mk2': 'Flashbang Mk II',
+  'flashbang-mk3': 'Flashbang Mk III',
+  molotov: 'Molotov',
+  'molotov-mk2': 'Molotov Mk II',
+  'molotov-mk3': 'Molotov Mk III',
 };
 
-/** What each Research Center node does, in the detail panel and a Tier 3 confirm (ID-263). */
+/** A number to at most 3 decimals, no trailing zeros: 0.345, 3.5, 4. */
+const sec = (x: number): string => String(Number(x.toFixed(3)));
+/** A share as a percent to at most 2 decimals: 3.45, 28.75, 13. */
+const pc = (x: number): string => String(Number((x * 100).toFixed(2)));
+/** A list of numbers as "a / b / c". */
+const per = (xs: readonly number[], f: (x: number) => string): string => xs.map(f).join(' / ');
+const MK = TECH_FX.mk;
+const mkPct = (f: number): string => `+${Math.round((f - 1) * 100)}%`;
+
+/** What each Research Center node does, in the detail panel and a confirm (ID-263, ID-284). */
 export const TECH_EFFECT: Readonly<Record<TechId, string>> = {
   'reinforced-wall': 'Wall HP +15% in every fight.',
   'steel-plating': 'Wall HP +30% in every fight, in place of the +15%.',
@@ -323,10 +364,9 @@ export const TECH_EFFECT: Readonly<Record<TechId, string>> = {
   'thick-coils': 'Barbed Wire rows have +50% HP.',
   'electric-wire':
     "An enemy entering Barbed Wire is stunned for 1 s (then can't be stunned again for 3 s).",
-  'hand-loads':
-    'When you pick one of these cards, it is 10% stronger: Heavy Rounds, Incendiary Rounds, Shock Rounds, Piercing Rounds, Scavenged Ammo.',
+  'hand-loads': `The first round of every squad gun's magazine always crits, at ×${TOP_CRIT} or the survivor's own crit multiplier when that is higher.`,
   'armour-piercing':
-    'While the squad holds one of those five ammo cards, its bullets ignore 20% of armour.',
+    'While the squad holds Heavy Rounds, Incendiary Rounds, Shock Rounds, Piercing Rounds or Scavenged Ammo, its bullets ignore 20% of armour.',
   'quick-mortars': 'Oil Bomb fires every 16 s instead of 20 (the first throw is as soon as ever).',
   'wide-slick': 'Oil Bomb slicks are 25% wider.',
   'napalm-mortar': 'Oil Bomb slicks land already burning, and stay for their full 10 s.',
@@ -334,6 +374,43 @@ export const TECH_EFFECT: Readonly<Record<TechId, string>> = {
   'wall-machine-gun': `A wall-mounted gun fires a ${CARD.wallGun.burst}-round burst every ${CARD.wallGun.every} s at the nearest enemy, anywhere on the field. Ignores part of its armour and keeps pace with bigger hordes.`,
   'shock-net': `Every ${CARD.net.every} s, stuns enemies near the wire for ${CARD.net.seconds} s.`,
   'tar-moat': `A tar strip along the wall slows enemies by ${Math.round(CARD.moat.slow * 100)}%. It catches fire after ${CARD.moat.fuse} s, or at once if something lights it.`,
+  // Ammo and throwables (ID-284); every number is read from the tables, so the words can't drift.
+  'incendiary-rounds': 'Can be the squad’s starting ammo card.',
+  'incendiary-rounds-mk2': `Burn ${mkPct(MK.burn[0])} (${per(
+    CARD.burn.share.map((x) => x * MK.burn[0]),
+    pc,
+  )}% of a Shambler’s HP a second).`,
+  'incendiary-rounds-mk3': `Burn ${mkPct(MK.burn[1])} (${per(
+    CARD.burn.share.map((x) => x * MK.burn[1]),
+    pc,
+  )}%), in place of the ${mkPct(MK.burn[0])}.`,
+  'shock-rounds': 'Can be the squad’s starting ammo card.',
+  'shock-rounds-mk2': `Paralysis ${mkPct(MK.shock[0])} (${per(
+    CARD.shock.seconds.map((x) => x * MK.shock[0]),
+    sec,
+  )} s; half for the heavy kinds).`,
+  'shock-rounds-mk3': `Paralysis ${mkPct(MK.shock[1])} (${per(
+    CARD.shock.seconds.map((x) => x * MK.shock[1]),
+    sec,
+  )} s), in place of the ${mkPct(MK.shock[0])}.`,
+  'frag-grenades': 'Can be the squad’s starting throwable.',
+  'frag-grenades-mk2': `Burst ${mkPct(MK.frag[0])} (${pc(CARD.frag.share * MK.frag[0])}% of a Shambler’s HP).`,
+  'frag-grenades-mk3': `Burst ${mkPct(MK.frag[1])} (${pc(CARD.frag.share * MK.frag[1])}%) and a ${Math.round((MK.reach - 1) * 100)}% wider burst (${sec(CARD.frag.radius * MK.reach)} px), in place of the ${mkPct(MK.frag[0])}.`,
+  flashbang: 'Can be the squad’s starting throwable.',
+  'flashbang-mk2': `Stun +${sec(MK.stun[0])} s (${per(
+    CARD.flashbang.seconds.map((x) => x + MK.stun[0]),
+    sec,
+  )} s).`,
+  'flashbang-mk3': `Stun +${sec(MK.stun[1])} s (${per(
+    CARD.flashbang.seconds.map((x) => x + MK.stun[1]),
+    sec,
+  )} s) and a ${Math.round((MK.reach - 1) * 100)}% wider radius (${sec(CARD.flashbang.radius * MK.reach)} px), in place of the +${sec(MK.stun[0])} s.`,
+  molotov: 'Can be the squad’s starting throwable.',
+  'molotov-mk2': `Fire damage ${mkPct(MK.fire[0])} (${pc(CARD.molotov.burn * MK.fire[0])}% of a Shambler’s HP a second).`,
+  'molotov-mk3': `Fire damage ${mkPct(MK.fire[1])} (${pc(CARD.molotov.burn * MK.fire[1])}%) and +${MK.fireSeconds} s burn time (${per(
+    CARD.molotov.seconds.map((x) => x + MK.fireSeconds),
+    sec,
+  )} s), in place of the ${mkPct(MK.fire[0])}.`,
 };
 
 /** Each Research Center branch's name, the chart's rows (ID-263). */
@@ -342,4 +419,9 @@ export const TECH_BRANCH_NAME: Readonly<Record<TechBranch, string>> = {
   wire: 'Barbed Wire',
   ammo: 'Ammo',
   mortars: 'Mortars',
+  incendiary: 'Incendiary',
+  shock: 'Shock',
+  frag: 'Frag',
+  flashbang: 'Flashbang',
+  molotov: 'Molotov',
 };

@@ -15,6 +15,42 @@ const state = (tech?: readonly TechId[], cards?: readonly UpgradeId[]): HordeSta
 };
 const BIG = POOL.length;
 
+describe('the ammo and throwable nodes add no offer weight (ID-284)', () => {
+  const KIT_IDS = TECH_IDS.slice(14);
+  const OLD_IDS = TECH_IDS.slice(0, 14);
+
+  it('lists no card for any of the five new branches', () => {
+    for (const branch of ['incendiary', 'shock', 'frag', 'flashbang', 'molotov'] as const) {
+      expect(TECH_CARDS[branch], branch).toEqual([]);
+    }
+  });
+
+  it('all 15 researched change no card’s weight, the unlocked cards included', () => {
+    const roomy: UpgradeId[] = [...UPGRADE_IDS];
+    expect(offerWeights(roomy, [...KIT_IDS])).toEqual(roomy.map(() => 1));
+    // The 14 give what they gave; the 15 on top change nothing.
+    expect(offerWeights(roomy, [...TECH_IDS])).toEqual(offerWeights(roomy, [...OLD_IDS]));
+    for (const id of [
+      'incendiary-rounds',
+      'shock-rounds',
+      'frag-grenades',
+      'flashbang',
+      'molotov',
+    ] as const) {
+      const only = offerWeights(roomy, [id, `${id}-mk2`, `${id}-mk3`] as TechId[]);
+      expect(only[roomy.indexOf(id)], id).toBe(1);
+    }
+  });
+
+  it('offers roll the same with the 15 researched as without', () => {
+    const base = state(OLD_IDS);
+    const kit = state([...TECH_IDS]);
+    for (let seed = 0; seed < 50; seed++) {
+      expect(rollOffer(createRng(seed), kit)).toEqual(rollOffer(createRng(seed), base));
+    }
+  });
+});
+
 describe('offerWeights', () => {
   it('is all 1 with nothing researched or only wall nodes', () => {
     expect(offerWeights(POOL, []).every((w) => w === 1)).toBe(true);

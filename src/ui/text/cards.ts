@@ -3,7 +3,7 @@
 // UPGRADES' levels) and which synergy is on (`synergyOf`); the words live here.
 import { patchUpGain, replaces, synergyOf, UPGRADES, type Synergy } from '../../core/cards.ts';
 import { CARD, CARD_MAX_LEVEL, TECH_FX, type TechId } from '../../core/data.ts';
-import { cardLevel, took, type HordeState, type UpgradeId } from '../../core/horde.ts';
+import { cardLevel, took, type HordeState, type MkCard, type UpgradeId } from '../../core/horde.ts';
 
 /** Flashbang's cost in words (ID-139). */
 const glareText = `−${Math.round((1 - CARD.flashbang.glare) * 100)}% squad gun range while held`;
@@ -125,6 +125,20 @@ export function synergyText(state: HordeState, id: UpgradeId): string | null {
   return s === null ? null : SYNERGY_TEXT[s];
 }
 
+/** A card's Mk from the researched nodes (ID-284): 0, 1 (Mk II) or 2 (Mk III), the highest counting. */
+const mkTech = (tech: readonly TechId[], card: MkCard): 0 | 1 | 2 =>
+  tech.includes(`${card}-mk3`) ? 2 : tech.includes(`${card}-mk2`) ? 1 : 0;
+/** The Mk's factor from `factors` (Mk II, Mk III), 1 with none. */
+const mkFactor = (tech: readonly TechId[], card: MkCard, factors: readonly number[]): number => {
+  const mk = mkTech(tech, card);
+  return mk === 0 ? 1 : factors[mk - 1]!;
+};
+/** A share as a percent to two decimals when not whole (a Mk's numbers): 3.45%, 28.75%. */
+const pct2 = (x: number): string => `${Number((x * 100).toFixed(2))}%`;
+/** Frag Grenades' card text with the Mk's burst (ID-284). */
+const fragText = (tech: readonly TechId[]): string =>
+  `${carryText(CARD.frag.every)} Hits the thickest group for ${pct2(CARD.frag.share * mkFactor(tech, 'frag-grenades', TECH_FX.mk.frag))} of a Shambler’s HP; the thrower stops firing for ${CARD.frag.pause} s`;
+
 /** A share as a percent, to one decimal when not whole: 25%, 7.5%. */
 const pct = (x: number): string => `${Number((x * 100).toFixed(1))}%`;
 /** A factor with at most 2 decimals and no trailing zeros: 1.33, 1.67, 2. */
@@ -137,11 +151,10 @@ const factor = (x: number): string => String(Number(x.toFixed(2)));
 export function effectAt(
   id: UpgradeId,
   n: number,
-  /** The Research Center nodes researched (ID-263): Hand-loads shows its stronger numbers. */
+  /** The Research Center nodes researched (ID-284): a card's Mk shows its stronger numbers. */
   tech: readonly TechId[] = [],
 ): { pre: string; value: string; post: string } | null {
   const lv = (levels: readonly number[]): number => levels[Math.min(levels.length, n) - 1]!;
-  const boost = tech.includes('hand-loads') ? TECH_FX.ammo : 1;
   switch (id) {
     case 'sharpshooter':
       return { pre: '', value: `+${pct(CARD.step.damage * n)}`, post: ' damage' };
@@ -176,13 +189,13 @@ export function effectAt(
     case 'scavenged-ammo':
       return {
         pre: 'Each gun shot has a ',
-        value: pct(Math.min(1, lv(CARD.scavenge) * boost)),
+        value: pct(Math.min(1, lv(CARD.scavenge))),
         post: ' chance not to use a round',
       };
     case 'piercing-rounds':
       return {
         pre: 'Bullets go through 1 more enemy ',
-        value: pct(Math.min(1, lv(CARD.pierce) * boost)),
+        value: pct(Math.min(1, lv(CARD.pierce))),
         post: ' of the time',
       };
     case 'ricochet':
@@ -194,28 +207,34 @@ export function effectAt(
     case 'incendiary-rounds':
       return {
         pre: 'Hits set enemies on fire: ',
-        value: pct(lv(CARD.burn.share) * boost),
+        value: pct2(lv(CARD.burn.share) * mkFactor(tech, 'incendiary-rounds', TECH_FX.mk.burn)),
         post: ` of a Shambler’s HP a second for ${CARD.burn.seconds} s`,
       };
     case 'shock-rounds':
       return {
         pre: 'Hits paralyse enemies for ',
-        value: `${Number((lv(CARD.shock.seconds) * boost).toFixed(2))} s`,
+        value: `${Number((lv(CARD.shock.seconds) * mkFactor(tech, 'shock-rounds', TECH_FX.mk.shock)).toFixed(3))} s`,
         post: ' (half on the big ones)',
       };
     // Thrown on their own, so each says how many and how often (design review, ID-139, ID-178).
-    case 'flashbang':
+    case 'flashbang': {
+      const mk = mkTech(tech, 'flashbang');
+      const radius = mk === 2 ? CARD.flashbang.radius * TECH_FX.mk.reach : CARD.flashbang.radius;
+      const stun = mk === 0 ? 0 : TECH_FX.mk.stun[mk - 1]!;
       return {
-        pre: `${carryText(CARD.flashbang.every)} Stuns enemies within ${CARD.flashbang.radius} px for `,
-        value: `${lv(CARD.flashbang.seconds)} s`,
+        pre: `${carryText(CARD.flashbang.every)} Stuns enemies within ${Number(radius.toFixed(1))} px for `,
+        value: `${Number((lv(CARD.flashbang.seconds) + stun).toFixed(2))} s`,
         post: `; ${glareText}`,
       };
-    case 'molotov':
+    }
+    case 'molotov': {
+      const extra = mkTech(tech, 'molotov') === 2 ? TECH_FX.mk.fireSeconds : 0;
       return {
         pre: `${carryText(CARD.molotov.every)} Burns for `,
-        value: `${lv(CARD.molotov.seconds)} s`,
-        post: ` at ${pct(CARD.molotov.burn)} of a Shambler’s HP a second; enemies ${pct(CARD.molotov.panic)} faster in it`,
+        value: `${lv(CARD.molotov.seconds) + extra} s`,
+        post: ` at ${pct2(CARD.molotov.burn * mkFactor(tech, 'molotov', TECH_FX.mk.fire))} of a Shambler’s HP a second; enemies ${pct(CARD.molotov.panic)} faster in it`,
       };
+    }
     case 'barbed-wire':
       return {
         pre: 'Field wire slows enemies ',
@@ -225,6 +244,13 @@ export function effectAt(
     default:
       return null;
   }
+}
+
+/** A card's effect in one line at level `level` with the Mk's numbers (ID-284): the list's detail. */
+export function cardLine(id: UpgradeId, level: number, tech: readonly TechId[] = []): string {
+  if (id === 'frag-grenades') return fragText(tech);
+  const at = effectAt(id, level, tech);
+  return at ? `${at.pre}${at.value}${at.post}` : CARD_TEXT[id];
 }
 
 /** What picking a card would give (ID-097), as its offer card spells it out. */
@@ -263,10 +289,8 @@ export function cardPitch(state: HordeState, id: UpgradeId): CardPitch {
     effect = { pre: 'Repairs ', from: null, to: `${Math.round(hp)} HP`, post: across };
     text = `Repairs ${Math.round(hp)} HP${across}`;
   }
-  // Research Center (ID-263): the constant texts are the unresearched numbers.
-  if (id === 'hollow-points' && tech.includes('hand-loads')) {
-    text = `+${pct((CARD.heavyRounds.damage - 1) * TECH_FX.ammo)} damage, +${Math.round((CARD.heavyRounds.reload - 1) * 100)}% reload time`;
-  }
+  // Research Center (ID-263, ID-284): the constant texts are the unresearched numbers.
+  if (id === 'frag-grenades') text = fragText(tech);
   if (id === 'oil-bomb') text = oilText(tech);
   let tag: string;
   let tagSpoken: string;

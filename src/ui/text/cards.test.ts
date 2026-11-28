@@ -46,15 +46,29 @@ describe('Research Center in the card words (ID-263)', () => {
     return s;
   };
 
-  it('Hand-loads: the five ammo cards’ numbers are shown 10% stronger', () => {
-    expect(effectAt('incendiary-rounds', 3, HL)!.value).toBe('9.9%');
-    expect(effectAt('incendiary-rounds', 3)!.value).toBe('9%');
-    expect(effectAt('piercing-rounds', 3, HL)!.value).toBe('82.5%');
-    expect(effectAt('scavenged-ammo', 3, HL)!.value).toBe('44%');
-    expect(effectAt('shock-rounds', 3, HL)!.value).toBe('0.44 s');
-    expect(effectAt('shock-rounds', 3)!.value).toBe('0.4 s');
-    expect(cardPitch(quietWith(HL), 'hollow-points').text).toBe('+41.8% damage, +25% reload time');
-    expect(cardPitch(quietWith([]), 'hollow-points').text).toBe('+38% damage, +25% reload time');
+  it('Hand-loads no longer changes the five ammo cards’ numbers (ID-284)', () => {
+    expect(effectAt('incendiary-rounds', 3, HL)!.value).toBe('9%');
+    expect(effectAt('piercing-rounds', 3, HL)!.value).toBe('75%');
+    expect(effectAt('scavenged-ammo', 3, HL)!.value).toBe('40%');
+    expect(effectAt('shock-rounds', 3, HL)!.value).toBe('0.4 s');
+    expect(cardPitch(quietWith(HL), 'hollow-points').text).toBe('+38% damage, +25% reload time');
+  });
+
+  it('a card’s Mk shows in its numbers (ID-284), the highest counting', () => {
+    const II: TechId[] = ['incendiary-rounds', 'incendiary-rounds-mk2'];
+    const III: TechId[] = [...II, 'incendiary-rounds-mk3'];
+    expect(effectAt('incendiary-rounds', 1, II)!.value).toBe('3.45%');
+    expect(effectAt('incendiary-rounds', 3, III)!.value).toBe('11.7%');
+    expect(effectAt('shock-rounds', 2, ['shock-rounds', 'shock-rounds-mk2'])!.value).toBe(
+      '0.345 s',
+    );
+    const fl = effectAt('flashbang', 3, ['flashbang', 'flashbang-mk2', 'flashbang-mk3'])!;
+    expect(fl.value).toBe('6 s');
+    expect(fl.pre).toContain('within 110 px');
+    expect(effectAt('molotov', 3, ['molotov', 'molotov-mk2', 'molotov-mk3'])!.value).toBe('9 s');
+    expect(
+      cardPitch(quietWith(['frag-grenades', 'frag-grenades-mk2']), 'frag-grenades').text,
+    ).toContain('28.75%');
   });
 });
 

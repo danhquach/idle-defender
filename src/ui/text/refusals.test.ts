@@ -212,6 +212,8 @@ const PINS: Pins = {
     [{ code: 'needs-tech', node: 'razor-wire' }, 'Needs Razor Wire'],
     [{ code: 'needs-tech', node: 'steel-plating' }, 'Needs Steel Plating'],
   ],
+  'kit-locked': [[{ code: 'kit-locked' }, 'Research it first']],
+  'kit-slot': [[{ code: 'kit-slot' }, 'Not a card for that slot']],
   'tech-scrap': [
     [{ code: 'tech-scrap', need: 200 }, 'Needs 200 Scrap'],
     [{ code: 'tech-scrap', need: 1200 }, 'Needs 1,200 Scrap'],

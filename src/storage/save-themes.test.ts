@@ -59,7 +59,7 @@ function reread(game: GameState, change: (g: Loose) => void = () => {}, v = SAVE
 
 describe('save: themed hordes (ID-238)', () => {
   it('is version 26, and a game with no theme seed writes no key', () => {
-    expect(SAVE_VERSION).toBe(27);
+    expect(SAVE_VERSION).toBe(28);
     const g = newGame('horde');
     expect('themes' in JSON.parse(encodeSave(g, NOW)).game).toBe(false);
     expect(reread(g)!.game).toEqual(g);

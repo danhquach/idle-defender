@@ -4,7 +4,6 @@ import { chooseCard } from './cards.ts';
 import { CARD, SEGMENT_HEIGHT, STEP, TECH_FX, WEAPONS, type TechId } from './data.ts';
 import {
   burnDpsOf,
-  extraPierce,
   hitDamage,
   newHorde,
   scavengeOf,
@@ -18,7 +17,6 @@ import {
   type HordeState,
   type UpgradeId,
 } from './horde.ts';
-import { createRng } from './rng.ts';
 import { enemy, setup } from './testing.ts';
 
 const tough = { hp: 1000, maxHp: 1000 };
@@ -267,18 +265,17 @@ describe('Quick Mortars, Wide Slick, Napalm Mortar', () => {
   });
 });
 
-describe('Hand-loads', () => {
+describe('Hand-loads no longer strengthens the ammo cards (ID-284)', () => {
   const HL: TechId[] = ['hand-loads'];
 
-  it('the five ammo cards’ numbers are 10% stronger', () => {
-    const plain = at('incendiary-rounds', 3);
-    const boosted = at('incendiary-rounds', 3, HL);
-    expect(burnDpsOf(boosted)).toBeCloseTo(burnDpsOf(plain) * 1.1, 9);
-    expect(scavengeOf(at('scavenged-ammo', 2, HL))).toBeCloseTo(CARD.scavenge[1]! * 1.1, 9);
-    expect(scavengeOf(at('scavenged-ammo', 2))).toBe(CARD.scavenge[1]);
+  it('Incendiary, Shock, Piercing, Scavenged and Heavy Rounds have their plain numbers', () => {
+    expect(burnDpsOf(at('incendiary-rounds', 3, HL))).toBe(burnDpsOf(at('incendiary-rounds', 3)));
+    expect(scavengeOf(at('scavenged-ammo', 2, HL))).toBe(CARD.scavenge[1]);
+    expect(at('hollow-points', 1, HL).mods.damage).toBe(CARD.heavyRounds.damage);
+    expect(quiet(HL).mods).toEqual(quiet().mods);
   });
 
-  it('Shock Rounds paralyse 10% longer; Piercing Rounds hit more often', () => {
+  it('Shock Rounds paralyse as long as ever', () => {
     const run = (tech: readonly TechId[]) => {
       const s = at('shock-rounds', 2, tech);
       const e = enemy(s, { ...tough, x: 700, y: ROW4 });
@@ -286,23 +283,7 @@ describe('Hand-loads', () => {
       const time = s.time;
       return find(tick(s, STEP), e.id).shockUntil! - time;
     };
-    expect(run(HL)).toBeCloseTo(run([]) * 1.1, 9);
-    const hits = (tech: readonly TechId[]) => {
-      const s = at('piercing-rounds', 3, tech);
-      const rng = createRng(5);
-      let n = 0;
-      for (let i = 0; i < 4000; i++) n += extraPierce(s, rng);
-      return n / 4000;
-    };
-    expect(hits(HL)).toBeGreaterThan(hits([]) + 0.04);
-    expect(hits(HL)).toBeLessThanOrEqual(1);
-  });
-
-  it('Heavy Rounds adds 41.8% damage with no change to the reload cost; nothing without the card', () => {
-    expect(at('hollow-points', 1, HL).mods.damage).toBeCloseTo(1 + 0.38 * 1.1, 9);
-    expect(at('hollow-points', 1).mods.damage).toBe(CARD.heavyRounds.damage);
-    expect(quiet(HL).mods).toEqual(quiet().mods);
-    expect(at('sharpshooter', 2, HL).mods.damage).toBe(at('sharpshooter', 2).mods.damage);
+    expect(run(HL)).toBeCloseTo(run([]), 9);
   });
 });
 

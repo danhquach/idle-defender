@@ -106,8 +106,8 @@ import {
   type Tier,
 } from '../core/data.ts';
 import { BLUEPRINT_GUNS, type Blueprints, type Craft } from '../core/craft.ts';
-import { newFarm, type Farm, type GameState, type RosterDefender } from '../core/game.ts';
-import { capSquad, settleSquad } from '../core/hordeonly.ts';
+import { newFarm, type Farm, type GameState, type Kit, type RosterDefender } from '../core/game.ts';
+import { capSquad, kitCards, settleSquad } from '../core/hordeonly.ts';
 import {
   AREA_IDS,
   DANGER_IDS,
@@ -161,6 +161,14 @@ export const SAVE_KEY = 'idle-defender.save';
 /** Where a save that failed to load is kept, so the new game's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'idle-defender.save.rejected';
 /**
+ * 28 since ammo and throwables in the Research Center (ID-284): the horde-only game may hold `kit`, the
+ * ammo card and the throwable picked to start the next horde with, written only with a pick. The
+ * reader never refuses the save for it: a plain object with no keys but `ammo` and `throwable` (any
+ * other key, an array or anything else reads as none), each an exact string from its slot's
+ * allow-list whose unlock is in the cleaned `tech`, anything else that slot's none. `tech` may hold the
+ * 15 new ids (the cap follows the node count). A v27 or older save has no `kit`, and one holding the
+ * key is refused.
+ *
  * 27 since the Research Center (ID-263): the horde-only game may hold `tech`, the nodes
  * researched, written only when any. The reader never refuses the save for it: known ids
  * (exact text) once each in `TECH_IDS` order, a node whose prerequisite is missing dropped, a
@@ -281,7 +289,7 @@ export const REJECTED_KEY = 'idle-defender.save.rejected';
  * out, none kept). A v3 save also has only the building materials in its stock (the rest
  * start at 0), and a v2 one less its perks too.
  */
-export const SAVE_VERSION = 27;
+export const SAVE_VERSION = 28;
 /** The most a save can have asking to join (ID-150): one, and a second with them (`SQUAD_JOIN`). */
 const MAX_JOINING = 2;
 /** Rows a save's base holds, and how far down today's field they sit. */
@@ -445,6 +453,7 @@ function readSave(v: unknown): Save {
   if (
     ![
       SAVE_VERSION,
+      27,
       26,
       25,
       24,
@@ -513,6 +522,7 @@ function readSave(v: unknown): Save {
     ver >= 25,
     ver >= 26,
     ver >= 27,
+    ver >= 28,
   );
   return {
     game,
@@ -554,6 +564,8 @@ function readGame(
   mayThemes: boolean,
   /** Whether the save may hold `tech` (v27). */
   mayTech: boolean,
+  /** Whether the save may hold `kit` (v28). */
+  mayKit: boolean,
 ): GameState {
   const lacks = (key: string): boolean =>
     typeof v === 'object' && v !== null && !Object.hasOwn(v, key);
@@ -602,8 +614,11 @@ function readGame(
     ...(mayThemes && !lacks('themes') ? ['themes'] : []),
     // Written only once a Research Center node is bought (ID-263).
     ...(mayTech && !lacks('tech') ? ['tech'] : []),
+    // Written only once a starting card is picked (ID-284).
+    ...(mayKit && !lacks('kit') ? ['kit'] : []),
   ]);
   const tech = Object.hasOwn(o, 'tech') ? readTech(o.tech) : [];
+  const kit = Object.hasOwn(o, 'kit') ? readKit(o.kit, tech) : null;
   const craft = Object.hasOwn(o, 'craft') ? readCraft(o.craft) : null;
   const slots = Object.hasOwn(o, 'slots') ? readSlots(o.slots) : null;
   // Exactly `true`; anything else (a string, 1, an object) loads with it off.
@@ -798,6 +813,7 @@ function readGame(
     ...(map ? { map } : {}),
     ...(medicine > 0 ? { medicine } : {}),
     ...(tech.length > 0 ? { tech } : {}),
+    ...(kit ? { kit } : {}),
   };
   if (!HORDE_ONLY) return loaded;
   // A stash past the loaded slots' cap (an older save's) is kept as it is and never grows.
@@ -920,6 +936,29 @@ function readSlots(v: unknown): { squad: number; stash: number } | null {
 function readTech(v: unknown): TechId[] {
   if (!Array.isArray(v)) return [];
   return cleanTech(v.slice(0, TECH_IDS.length * 2));
+}
+
+/**
+ * The starting pick (ID-284): a plain object whose only keys are `ammo` and `throwable`, each an
+ * exact string from its slot's list (`kitCards` of the cleaned `tech`: the card's unlock is
+ * researched). Never throws: anything else (not an object, an array, another key, a number, a
+ * long, bidi, zero-width or look-alike string, a card of the other slot) reads as none, a bad
+ * slot as that slot's none. Null with no pick.
+ */
+function readKit(v: unknown, tech: readonly TechId[]): Kit | null {
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return null;
+  if (Object.keys(v).some((key) => key !== 'ammo' && key !== 'throwable')) return null;
+  const out: Kit = {};
+  for (const slot of ['ammo', 'throwable'] as const) {
+    if (!Object.hasOwn(v, slot)) continue;
+    const id = (v as Record<string, unknown>)[slot];
+    const card =
+      typeof id === 'string'
+        ? kitCards({ tech: [...tech] }, slot).find((c) => c === id)
+        : undefined;
+    if (card !== undefined) out[slot] = card;
+  }
+  return Object.keys(out).length > 0 ? out : null;
 }
 
 /**

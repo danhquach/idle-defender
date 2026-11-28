@@ -51,6 +51,7 @@ import {
   type DefenderSpec,
   type HordeState,
   type Injury,
+  type UpgradeId,
 } from './horde.ts';
 import { loadoutError, type Loadout } from './loadout.ts';
 import type { LeftWeapon, Patrol, PatrolReport } from './patrol.ts';
@@ -84,6 +85,12 @@ export interface RosterDefender extends DefenderSpec {
    * Gone once a horde is played.
    */
   startHp?: number;
+}
+
+/** The starting pick (ID-284): one ammo card and one throwable, each optional. */
+export interface Kit {
+  ammo?: UpgradeId;
+  throwable?: UpgradeId;
 }
 
 export interface GameState {
@@ -155,6 +162,11 @@ export interface GameState {
    * Absent with none (like `slots`), so an unresearched game saves and plays as before.
    */
   tech?: TechId[];
+  /**
+   * Horde-only (ID-284): the ammo card and the throwable picked to start the next horde with, each
+   * kept from horde to horde until changed. Absent with none (like `tech`).
+   */
+  kit?: Kit;
   /**
    * Horde-only (ID-209): the blueprints held and the guns crafted so far; absent until a
    * blueprint drops.

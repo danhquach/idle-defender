@@ -14,6 +14,7 @@ import {
   type EnemyKind,
   type GunBase,
   type Rarity,
+  type TechId,
   type ThemeId,
 } from '../data.ts';
 import { newGame, type GameState } from '../game.ts';
@@ -26,6 +27,7 @@ import { recommendedPower, squadPower } from '../squadpower.ts';
 import { xpForLevel } from '../stats.ts';
 import { themeAt } from '../themes.ts';
 import { REF_SHARE, refTech } from './refplayer.ts';
+import { cleanTech, techOf } from '../techtree.ts';
 import { xpToNext } from '../waves.ts';
 
 export const SEEDS = 20;
@@ -142,6 +144,32 @@ export function withRef(
 ): GameState {
   const tech = refTech(modeOf(game), n, share);
   return tech.length > 0 ? { ...game, tech } : game;
+}
+
+/**
+ * `game` with the Ammo & throwables chains of `ammo` and `throwable` researched up to Mk
+ * `mk` (ID-284: 0 the unlock only, 1 Mk II, 2 Mk III) and both picked as the squad's starting
+ * cards, on top of whatever it already has researched (`withRef`'s nodes, say). The reference
+ * player picks none, so this is a researched player who also bought and picked a kit.
+ */
+export function withKit(
+  game: GameState,
+  ammo: 'incendiary-rounds' | 'shock-rounds' | null,
+  throwable: 'frag-grenades' | 'flashbang' | 'molotov' | null,
+  mk: 0 | 1 | 2 = 2,
+): GameState {
+  const chain = (id: string): TechId[] =>
+    [id, `${id}-mk2`, `${id}-mk3`].slice(0, mk + 1) as TechId[];
+  const picked = [ammo, throwable].filter((id) => id !== null);
+  const tech = cleanTech([...techOf(game), ...picked.flatMap(chain)]);
+  return {
+    ...game,
+    tech,
+    kit: {
+      ...(ammo !== null ? { ammo } : {}),
+      ...(throwable !== null ? { throwable } : {}),
+    },
+  };
 }
 
 /** Fights won out of `seeds` at horde `n` (the game's own mode's), by `game`'s squad. */

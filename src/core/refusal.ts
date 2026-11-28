@@ -159,6 +159,9 @@ export type RefusalWhy =
   // The Research Center (ID-263, horde-only).
   | { code: 'unknown-tech' }
   | { code: 'needs-tech'; node: TechId }
+  // The starting pick (ID-284).
+  | { code: 'kit-locked' }
+  | { code: 'kit-slot' }
   /** Worded with thousands separators ("Needs 1,200 Scrap"), as the Research Center shows costs. */
   | { code: 'tech-scrap'; need: number };
 

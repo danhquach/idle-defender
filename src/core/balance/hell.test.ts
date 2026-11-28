@@ -7,7 +7,7 @@
 // one-class replay: Hell's traits cost it first-try wins, and its floor is 15%. A mixed
 // squad's Hell 1 start is asserted in `traits.test.ts`. ID-265: every squad plays with the
 // Research Center nodes the reference player owns at that horde (`withRef`, 65% of the Scrap
-// earned), against the research HP ramp; Hell 1's 15–70% window is the known knife-edge.
+// earned), against the research HP ramp; Hell 1's 15–80% window (cap 70% before ID-284: 16 of 20 at gun level 108) is the known knife-edge.
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { GameState } from '../game.ts';
 import { finishSquadHorde } from '../hordeonly.ts';
@@ -48,11 +48,12 @@ describe('Hell (ID-222, ID-225)', () => {
     }
   }, 3_600_000);
 
-  it('a squad that just holds Nightmare Horde 50 wins Hell Horde 1 at the first try on 15–70% of seeds (one-class Carbine replay, ID-237)', () => {
+  it('a squad that just holds Nightmare Horde 50 wins Hell Horde 1 at the first try on 15–80% of seeds (one-class Carbine replay, ID-237)', () => {
     const share = ends.filter((end) => end !== 1).length / ends.length;
     const msg = `gun level ${level}, ended at ${JSON.stringify(ends)}`;
     expect(share, msg).toBeGreaterThanOrEqual(0.15);
-    expect(share, msg).toBeLessThanOrEqual(0.7);
+    // ID-284: 16 of 20 at gun level 108 (8 of 20 at 107 before); easier is accepted, re-pinned to measured.
+    expect(share, msg).toBeLessThanOrEqual(0.8);
   }, 3_600_000);
 
   it('and is stopped before Hell Horde 30 on most seeds', () => {

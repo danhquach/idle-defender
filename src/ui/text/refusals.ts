@@ -157,6 +157,8 @@ const TEXT: Texts = {
   'generator-built': () => 'The generator is already built',
   'unknown-tech': () => 'Unknown upgrade',
   'needs-tech': (r) => `Needs ${TECH_NAME[r.node]}`,
+  'kit-locked': () => 'Research it first',
+  'kit-slot': () => 'Not a card for that slot',
   'tech-scrap': (r) => `Needs ${r.need.toLocaleString('en-US')} Scrap`,
 };
 

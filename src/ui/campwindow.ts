@@ -95,6 +95,12 @@ export function shortOffer(text: string): (string | HTMLElement)[] {
 const ORDER = ['roster', 'weapons', 'craft', 'map'];
 const place = (id: string): number => (ORDER.indexOf(id) + ORDER.length + 1) % (ORDER.length + 1);
 
+/** The groups of tabs that stay on the phone sheet as pills, each while one of them is on show. */
+const PILLS: readonly (readonly string[])[] = [
+  ['weapons', 'craft'],
+  ['upgrades', 'kit'],
+];
+
 let serial = 0;
 
 export function createCampWindow(root: HTMLElement): CampWindow {
@@ -166,10 +172,9 @@ export function createCampWindow(root: HTMLElement): CampWindow {
     const on = isShortTouch(window);
     dialog.setAttribute('aria-modal', String(!on));
     closeX.hidden = hint.hidden = done.hidden = on;
-    const pills = shown?.id === 'weapons' || shown?.id === 'craft';
-    for (const t of tabs) {
-      t.button.hidden = on && !(pills && (t.tab.id === 'weapons' || t.tab.id === 'craft'));
-    }
+    // The tabs that stay as pills on the sheet: Weapons and Craft, and Research's two (ID-284).
+    const pills = PILLS.find((group) => shown !== null && group.includes(shown.id));
+    for (const t of tabs) t.button.hidden = on && !pills?.includes(t.tab.id);
     if (on && foot.parentElement !== head) head.insertBefore(foot, tablist.nextSibling);
     else if (!on && foot.parentElement !== dialog) dialog.append(foot);
   }
