@@ -69,6 +69,7 @@ import {
 import { GROUND_TILE, SURROUND_BLOCK, WIRE } from './ground.ts';
 import { BLAST, FIREBALL } from './explosion.ts';
 import { SPIT } from './spit.ts';
+import { BOMB, bombAt } from './bomb.ts';
 import { CUTS, DEATH, deathOf, type Cut, type Death } from './death.ts';
 import {
   BOSS_LOOK,
@@ -89,8 +90,6 @@ import {
   molotovLook,
   STARS,
   thrownFall,
-  fallAt,
-  THROWN,
   FIREBALL_WIDTH,
   SHOCK,
   twitch,
@@ -1551,16 +1550,34 @@ describe('drawScene with art', () => {
     expect(booms('molotov')).toBe(0);
   });
 
-  it('an airstrike bomb arcs in from the left, nose along its path, landing on its spot (ID-107)', () => {
+  it("an airstrike bomb drops straight down from the field's top edge, nose down, speeding up (ID-290)", () => {
     const bomb = { skill: 'airstrike' as const, x: 1000, y: 300, at: 2 };
-    const start = fallAt(bomb, 0);
-    const end = fallAt(bomb, 1);
-    expect(start.x).toBeCloseTo(1000 - THROWN.carry, 9);
-    expect(end).toEqual({ x: 1000, y: 300, z: 0 });
-    // Moving right all the way down, dropping faster as it goes.
-    expect(fallAt(bomb, 0.5).x).toBeGreaterThan(start.x);
-    expect(start.z - fallAt(bomb, 0.5).z).toBeLessThan(fallAt(bomb, 0.5).z - end.z);
-    // Drawn with the bomb art, nose turned from near level at the top to steep at the bottom.
+    const land = project({ x: 1000, y: 300 }, CAM);
+    const top = project({ x: 1000, y: 0 }, CAM).sy;
+    const half = BOMB.length / 2;
+    const at = (u: number, still = false) => bombAt(bomb, u, CAM, still);
+    // Straight down over its spot: never sideways.
+    for (const u of [0, 0.3, 0.7, 1]) expect(at(u).sx).toBeCloseTo(land.sx, 9);
+    // Its tail on the field's top edge at the drop, its nose on the spot at the landing.
+    expect(at(0).sy - half).toBeCloseTo(top, 9);
+    expect(at(1).sy + half).toBeCloseTo(land.sy, 9);
+    // Speeding up: the second half of the time covers more ground than the first.
+    expect(at(1).sy - at(0.5).sy).toBeGreaterThan(at(0.5).sy - at(0).sy);
+    // A spot by the top edge still gets a fall onto it, from at most half a bomb over the edge.
+    const high = { ...bomb, y: 60 };
+    expect(bombAt(high, 0, CAM).sy - half).toBeCloseTo(top - half, 9);
+    expect(bombAt(high, 1, CAM).sy).toBeGreaterThan(bombAt(high, 0, CAM).sy);
+    // Right on the edge there is no room: it shows on its spot, never falling upward.
+    const edge = { ...bomb, y: 0 };
+    expect(bombAt(edge, 0, CAM)).toEqual(bombAt(edge, 1, CAM));
+    // Reduce motion: only the last short drop, landing on the same spot.
+    expect(at(1, true)).toEqual(at(1));
+    expect(at(1, true).sy - at(0, true).sy).toBeCloseTo(BOMB.shortDrop, 9);
+    // Zoomed, the bomb and its drop scale with the camera.
+    const zoomed = { ...CAM, zoom: 0.5 };
+    expect(bombAt(bomb, 1, zoomed).sy + half / 2).toBeCloseTo(project(bomb, zoomed).sy, 9);
+    // Drawn with the bomb art at the same turn all the way down: nose down (the art's nose
+    // points up-right, −45°).
     const angles: number[] = [];
     for (const u of [0.05, 0.95]) {
       const r = recorder();
@@ -1574,12 +1591,7 @@ describe('drawScene with art', () => {
       );
       expect(r.drawn).toContain(BOMB_ART);
     }
-    // The art's nose points up-right (−45°): the path's angle is the turn less 45°.
-    const path = angles.map((a) => a - Math.PI / 4);
-    expect(path[0]!).toBeGreaterThan(0); // already heading down a little
-    expect(path[0]!).toBeLessThan(Math.PI / 4);
-    expect(path[1]!).toBeGreaterThan(Math.PI / 4); // steep
-    expect(path[1]!).toBeLessThan(Math.PI / 2);
+    for (const a of angles) expect(a - Math.PI / 4).toBeCloseTo(Math.PI / 2, 9);
   });
 
   it('draws a fireball as its flip-book frames standing on its spot, a frag smaller (ID-107)', () => {
