@@ -1358,7 +1358,7 @@ export function start(root: HTMLElement, art: Art): void {
   }
   // Once a second (ID-219): the map's countdowns and the World map button; a clock run back is
   // made up for (`syncClock`); a patrol back shows its report on the start screen once, with
-  // nothing else open.
+  // nothing else open (off the phone shell).
   const reported = new Set<number>();
   window.setInterval(() => {
     if (!mapTab) return;
@@ -1371,7 +1371,10 @@ export function start(root: HTMLElement, art: Art): void {
     const back = backPatrols(game, now).filter((p) => !reported.has(p.no));
     if (back.length > 0 && !horde && !dialogOpen()) {
       for (const p of back) reported.add(p.no);
-      mapTab.open(mapOpen);
+      // Not on the phone shell (ID-278): the sheet would open by itself a second after Continue,
+      // its Map button lit, so the player's first tap on Map closed it. The button's badge says
+      // a report is ready, and one tap opens the map on it.
+      if (!isShortTouch(window)) mapTab.open(mapOpen);
     }
   }, 1000);
   if (!storage) menu.status('off');

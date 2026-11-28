@@ -268,6 +268,23 @@ export function createResearchCenter(root: HTMLElement, opts: ResearchOptions): 
     }
   }
 
+  /**
+   * A node's second line. "Needs " and the " Scrap" unit are spans of their own, so the phone
+   * shell can leave them out of a 96 px node (the words read the same on every other screen).
+   */
+  function faceEl(text: string): HTMLElement {
+    const face = el('span', 'research-node-face');
+    const lead = text.startsWith('Needs ') ? 'Needs ' : '';
+    const unit = text.endsWith(' Scrap') ? ' Scrap' : '';
+    const mid = text.slice(lead.length, text.length - unit.length);
+    face.append(
+      ...(lead ? [el('span', 'research-face-lead', lead)] : []),
+      mid,
+      ...(unit ? [el('span', 'research-face-unit', unit)] : []),
+    );
+    return face;
+  }
+
   function drawChart(game: GameState): void {
     const nodes: Element[] = [connectors(doc, techOf(game), selected)];
     for (let t = 1; t <= 4; t++) {
@@ -291,10 +308,7 @@ export function createResearchCenter(root: HTMLElement, opts: ResearchOptions): 
         b.style.gridRow = String(row + 2);
         b.style.gridColumn = String(node.tier + 1);
         b.setAttribute('aria-pressed', String(id === selected));
-        b.append(
-          el('span', 'research-node-name', TECH_NAME[id]),
-          el('span', 'research-node-face', face.text),
-        );
+        b.append(el('span', 'research-node-name', TECH_NAME[id]), faceEl(face.text));
         b.addEventListener('click', () => pick(id));
         // A combo's lines light up while its node (or a parent) is hovered or focused.
         for (const on of ['pointerenter', 'focus'] as const) b.addEventListener(on, () => mark(id));

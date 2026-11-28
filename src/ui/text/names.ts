@@ -40,6 +40,12 @@ export const unlockHint = (mode: Mode): string => {
     : `Hold ${hordeName(before, MODE_UNLOCK_HORDE)} to unlock ${MODE_NAME[mode]}`;
 };
 
+/** The same in a few words, for a narrow line: "Hell: hold Nightmare 50"; empty for an open mode. */
+export const unlockShort = (mode: Mode): string => {
+  const before = modeBefore(mode);
+  return before === null ? '' : `${MODE_NAME[mode]}: hold ${hordeName(before, MODE_UNLOCK_HORDE)}`;
+};
+
 /** "Resting: 2 hordes" / "Resting: 1 horde" (ID-147). */
 export const restLabel = (rest: number): string =>
   `Resting: ${rest} ${rest === 1 ? 'horde' : 'hordes'}`;

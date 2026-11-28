@@ -2068,6 +2068,11 @@ button[data-card='tar-moat'] .hud-held-icon {
   font-weight: 400;
 }
 
+/* Only the phone shell shows the locked modes' conditions as a line under the row. */
+.hud-mode-note {
+  display: none;
+}
+
 @media (pointer: coarse) {
   .hud-mode {
     min-height: 44px;
@@ -8860,11 +8865,18 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     min-height: 0;
   }
 
-  /* Research: a 44 px label column and four columns that share the rest (minmax 0), so the whole
-     chart, Tier 4's right border included, fits the 552 px a 640 px screen leaves between the
-     rails; the body keeps 4 px at its sides, and scrolls sideways only as a safety net. */
+  /* Research (ID-278): a 48 px label column and four columns that share the rest (minmax 0), so
+     the whole chart, Tier 4's right border included, fits the 552 px a 640 px screen leaves
+     between the rails; the body keeps 4 px at its sides, and scrolls sideways only as a safety
+     net. The header row is about 18 px and each branch row 56 px (a 48 px node, 4 px clear above
+     and below, so two nodes are 8 px apart): 36 px of header and sheet, 8 px of padding and the
+     chart come to about 286 px, under the 303 px of the shortest screen, so all four branches
+     show. The connectors are drawn in cell units (preserveAspectRatio none), so equal rows keep
+     every line on its node's centre; the nodes' 8 px side margin keeps their ends inside the
+     lines' 7% reach even at 640 px. */
   .camp-scrim .research-chart {
-    grid-template-columns: 44px repeat(4, minmax(0, 1fr));
+    grid-template-columns: 48px repeat(4, minmax(0, 1fr));
+    grid-template-rows: auto repeat(4, 56px);
     min-width: 0;
   }
 
@@ -8873,10 +8885,189 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     overflow-x: auto;
   }
 
+  .camp-scrim .research-tier {
+    padding-bottom: var(--space-2);
+    line-height: 14px;
+  }
+
+  /* The branch names at 11 px, in the case they are written in (capitals at 11 px would put
+     "MORTARS" past the 48 px column); "Barbed Wire" takes two lines. */
   .camp-scrim .research-branch {
     min-width: 0;
-    font-size: 9px;
+    font-size: 11px;
     letter-spacing: 0;
+    line-height: 13px;
+    text-transform: none;
+  }
+
+  /* A node's text is at most two 13 px name lines over one 13 px face line (39 px, with 2 px
+     above and below and the border: 45 of the 48 px). The face never wraps: it drops "Needs "
+     (a locked node names its prerequisites) and " Scrap" (the cost keeps its number), and a
+     name breaks only at a space or its own hyphen, never mid-word. */
+  .camp-scrim .research-node {
+    margin: var(--space-4) var(--space-8);
+    padding: var(--space-2) var(--space-6);
+    gap: 0;
+  }
+
+  .camp-scrim .research-node-name {
+    font-size: 11px;
+    line-height: 13px;
+    hyphens: manual;
+    word-break: normal;
+    overflow-wrap: normal;
+  }
+
+  .camp-scrim .research-node-face {
+    font-size: 11px;
+    line-height: 13px;
+    white-space: nowrap;
+  }
+
+  .camp-scrim .research-face-lead,
+  .camp-scrim .research-face-unit {
+    display: none;
+  }
+
+  /* The World map (ID-278): the four areas side by side, each a short picture, its drops and the
+     44 px button, so Send is on show without scrolling: about 177 px of card at 667 px, 195 px
+     at 862 px, under the 250 px a sheet leaves below its header. The countdown moves to the
+     picture's top so it never covers the name. */
+  .camp-scrim .map-body {
+    gap: var(--space-4);
+    padding: var(--space-4) var(--space-8);
+  }
+
+  .camp-scrim .map-areas {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .camp-scrim .map-area {
+    gap: var(--space-4);
+    padding-bottom: var(--space-6);
+  }
+
+  .camp-scrim .map-time {
+    top: var(--space-4);
+    transform: translateX(-50%);
+    font-size: var(--text-sm);
+  }
+
+  .camp-scrim .map-drops {
+    gap: 0 var(--space-8);
+  }
+
+  .camp-scrim .map-send,
+  .camp-scrim .map-open-report {
+    min-height: 44px;
+  }
+
+  /* The team out takes the button's 44 px, one member to a line, so the cards line up. */
+  .camp-scrim .map-team {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 44px;
+  }
+
+  /* The report's title takes the focus when it opens, to be read out: no ring on it. */
+  .camp-scrim .map-area-name:focus {
+    outline: none;
+  }
+
+  .camp-scrim .map-note {
+    font-size: 11px;
+    text-align: center;
+  }
+
+  /* The horde card's mode row (ID-218) in the squad panel's 196 to 234 px column: all three modes
+     in one row of 44 px buttons, 8 px apart, 11 px words (about 157 px of words and gaps at the
+     narrowest). A locked mode shows a padlock and its short name; what opens it is one 11 px line
+     under the row (the button keeps the full text in its name and title), so the row is about
+     61 px tall and the select, Power line and win cost stay in the card. */
+  .hud-debrief .hud-mode-row {
+    grid-template-columns: repeat(3, minmax(min-content, 1fr));
+    gap: var(--space-4) var(--space-8);
+    margin-bottom: var(--space-4);
+  }
+
+  .hud-debrief .hud-mode {
+    box-sizing: border-box;
+    min-width: 0;
+    height: 44px;
+    min-height: 44px;
+    padding: 0 var(--space-2);
+    font-size: 11px;
+  }
+
+  .hud-debrief .hud-mode-hint {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .hud-debrief .hud-mode:disabled .hud-mode-name::before {
+    content: '';
+    display: inline-block;
+    box-sizing: border-box;
+    width: 8px;
+    height: 10px;
+    margin-right: var(--space-4);
+    border: 1.5px solid currentColor;
+    border-bottom: 0;
+    border-radius: 4px 4px 0 0;
+    background: linear-gradient(currentColor, currentColor) bottom / 100% 6px no-repeat;
+  }
+
+  .hud-debrief .hud-mode-note {
+    display: block;
+    grid-column: 1 / -1;
+    margin: 0;
+    overflow: hidden;
+    font-size: 11px;
+    line-height: 13px;
+    color: var(--color-text-muted);
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  /* The horde card, tightened (ID-278): 4 px between its text lines and 8 px around the select
+     and the mode buttons (the row's 4 px margin and the 4 px gap), so the mode row, its one-line
+     note, the select, Power and the win cost fit without scrolling at 862 x 303 and 667 x 320.
+     Power and its badge stay on one line (10 px at 640 px, 11 px from 667 px up, by viewport
+     units, as no width query decides the shell); the win cost and the Fit pill take the next. */
+  .hud-debrief .hud-horde-ready {
+    gap: 0 var(--space-8);
+  }
+
+  .hud-debrief .hud-horde-power,
+  .hud-debrief .hud-horde-fit {
+    font-size: clamp(10px, 1.65vw, 11px);
+    line-height: 14px;
+    white-space: nowrap;
+  }
+
+  /* The "try Horde 8 to farm" and "no beaten horde" hints are not drawn here: the card has no
+     room for them beside the mode row, select, Power and win cost (designer sign-off, ID-278),
+     and the open select marks the horde to farm. A screen reader still reads them. */
+  .hud-debrief .hud-horde-hint:not(.hud-horde-fit-hint) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .hud-debrief .hud-horde-power:not(.hud-horde-injury) {
+    flex: 1 0 100%;
+  }
+
+  .hud-debrief .hud-horde-band {
+    padding: 0 var(--space-4);
+    font-size: 10px;
+    line-height: 13px;
   }
 
   /* A sheet header with nothing in it (no pill, tool or status message, as on Research) keeps
@@ -8916,6 +9107,7 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
      choice and Start show in one view. A short result fills the height too, by intent. --- */
   .hud-result.hud-debrief {
     top: 4px;
+    background: var(--color-panel-solid);
     display: grid;
     grid-template-columns: minmax(0, 1fr) clamp(220px, 30vw, 260px);
     grid-template-rows: auto minmax(0, 1fr);
@@ -9228,9 +9420,14 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 
   /* Sized to its content (no empty box under it), scrolling only when taller than the
      column; the skills and Start sit at the column's foot. */
+  /* One column that scrolls, never a second one: the base card wraps, and with its height
+     capped the select, Power and hint wrapped into a column past the card's right edge. */
   .hud-debrief .hud-horde-pick {
     flex: 0 1 auto;
+    flex-wrap: nowrap;
+    gap: var(--space-4);
     min-height: 0;
+    padding: var(--space-4) var(--space-8);
     overflow-y: auto;
   }
 
