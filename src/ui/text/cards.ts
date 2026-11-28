@@ -36,6 +36,7 @@ export const CARD_NAME: Readonly<Record<UpgradeId, string>> = {
   'extended-mags': 'Extended Mags',
   'incendiary-rounds': 'Incendiary Rounds',
   'shock-rounds': 'Shock Rounds',
+  'toxin-rounds': 'Toxin Rounds',
   'concussion-rounds': 'Concussion Rounds',
   'frag-grenades': 'Frag Grenades',
   flashbang: 'Flashbang',
@@ -76,6 +77,7 @@ export const CARD_TEXT: Readonly<Record<UpgradeId, string>> = {
   'extended-mags': 'Gun magazines hold more rounds',
   'incendiary-rounds': 'Bullets set the enemy they hit on fire for 3 s',
   'shock-rounds': 'Bullet hits briefly paralyse the enemy',
+  'toxin-rounds': `Bullets poison the enemy they hit for ${CARD.toxin.seconds} s; one that dies poisoned bursts and poisons the enemies near it`,
   // The gain and its cost (ID-137), as every epic card names both.
   'concussion-rounds': `Hits knock enemies back up to ${CARD.concussion.cap} px and daze them: +${Math.round(CARD.concussion.daze * 100)}% damage taken for ${CARD.concussion.dazeFor} s; −${Math.round((1 - CARD.concussion.fireRate) * 100)}% fire rate`,
   'frag-grenades': `${carryText(CARD.frag.every)} Hits the thickest group for ${Math.round(CARD.frag.share * 100)}% of a Shambler’s HP; the thrower stops firing for ${CARD.frag.pause} s`,
@@ -215,6 +217,12 @@ export function effectAt(
         pre: 'Hits paralyse enemies for ',
         value: `${Number((lv(CARD.shock.seconds) * mkFactor(tech, 'shock-rounds', TECH_FX.mk.shock)).toFixed(3))} s`,
         post: ' (half on the big ones)',
+      };
+    case 'toxin-rounds':
+      return {
+        pre: 'Hits poison enemies: ',
+        value: pct2(lv(CARD.toxin.share) * mkFactor(tech, 'toxin-rounds', TECH_FX.mk.toxin)),
+        post: ` of a Shambler’s HP a second for ${CARD.toxin.seconds} s; one that dies poisoned bursts for ${pct2(CARD.toxin.burst * mkFactor(tech, 'toxin-rounds', TECH_FX.mk.toxinBurst))} within ${CARD.toxin.radius} px`,
       };
     // Thrown on their own, so each says how many and how often (design review, ID-139, ID-178).
     case 'flashbang': {

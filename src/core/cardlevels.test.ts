@@ -107,6 +107,7 @@ describe('levels (ID-097)', () => {
         'scavenged-ammo',
         'shock-rounds',
         'speed-loaders',
+        'toxin-rounds',
       ].sort(),
     );
     for (const id of UPGRADE_IDS.filter((u) => UPGRADES[u].rarity === 'epic')) {
@@ -705,6 +706,30 @@ describe('Shock Rounds (ID-097)', () => {
     const e = enemy(s, { ...tough, x: 700, y: ROW4 });
     shoot(s, { x: 690, y: ROW4, damage: 10, owner: 'turret:0' });
     expect(find(tick(s, STEP), e.id).shockUntil).toBeUndefined();
+  });
+});
+
+describe('Toxin Rounds in the ammo slot (ID-285)', () => {
+  it('replaces Incendiary Lv 2 at Lv 1, and the old card and its levels are gone', () => {
+    let s = at('incendiary-rounds', 2);
+    expect(replaces(s, 'toxin-rounds')).toBe('incendiary-rounds');
+    expect(replaces(at('toxin-rounds', 2), 'shock-rounds')).toBe('toxin-rounds');
+    s = picked(s, 'toxin-rounds');
+    expect(s.taken).toEqual(['toxin-rounds']);
+    expect(s.cardLevels).toEqual({ 'toxin-rounds': 1 });
+    s = picked(s, 'toxin-rounds');
+    expect(s.cardLevels).toEqual({ 'toxin-rounds': 2 });
+    s = picked(s, 'shock-rounds');
+    expect(s.taken).toEqual(['shock-rounds']);
+    expect(s.cardLevels).toEqual({ 'shock-rounds': 1 });
+  });
+
+  it('stays in the pool until max, and the other ammo cards stay offered at its max', () => {
+    expect(eligible(quiet(), 'toxin-rounds')).toBe(true);
+    const s = at('toxin-rounds', 3);
+    expect(eligible(s, 'toxin-rounds')).toBe(false);
+    expect(eligible(s, 'incendiary-rounds') && eligible(s, 'shock-rounds')).toBe(true);
+    expect(SQUAD_CARDS).toContain('toxin-rounds');
   });
 });
 

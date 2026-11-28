@@ -272,7 +272,7 @@ interface Seen {
   x: number;
   y: number;
   hp: number;
-  /** All the HP fire has taken from it (`Enemy.burnt`). */
+  /** All the HP fire and poison ticks have taken from it (`Enemy.burnt`). */
   burnt: number;
   hurtAt: number;
   gait: Gait;

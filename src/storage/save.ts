@@ -166,7 +166,8 @@ export const REJECTED_KEY = 'idle-defender.save.rejected';
  * reader never refuses the save for it: a plain object with no keys but `ammo` and `throwable` (any
  * other key, an array or anything else reads as none), each an exact string from its slot's
  * allow-list whose unlock is in the cleaned `tech`, anything else that slot's none. `tech` may hold the
- * 15 new ids (the cap follows the node count). A v27 or older save has no `kit`, and one holding the
+ * 18 new ids (the cap follows the node count; ID-285 added Toxin Rounds' three and its ammo card with no
+ * version bump: both readers are list-driven, and a v28 save written before it has none of them). A v27 or older save has no `kit`, and one holding the
  * key is refused.
  *
  * 27 since the Research Center (ID-263): the horde-only game may hold `tech`, the nodes

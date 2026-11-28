@@ -1,5 +1,5 @@
 // ID-284: save version 28. The starting pick `kit` (written only with a pick) and the 15 new
-// `tech` ids. Everything in it is untrusted: the reader never refuses the save for `kit`, keeps
+// `tech` ids (ID-285 adds Toxin Rounds' three below, with no version bump). Everything in it is untrusted: the reader never refuses the save for `kit`, keeps
 // only an exact card id of the slot whose unlock is researched, and reads anything else as none.
 import { describe, expect, it } from 'vitest';
 import { recruit } from '../core/camp.ts';
@@ -42,6 +42,56 @@ function expectClean(value: unknown, tech: TechId[] = TECH_BOTH): unknown {
   expect(JSON.parse(encodeSave(loaded!.game, NOW)).game.kit).toEqual(kit);
   return kit;
 }
+
+describe('save: Toxin Rounds (ID-285, no version bump)', () => {
+  const TOX: TechId[] = ['toxin-rounds', 'toxin-rounds-mk2', 'toxin-rounds-mk3'];
+
+  it('round-trips its three nodes and the pick at version 28', () => {
+    expect(SAVE_VERSION).toBe(28);
+    const g = camp({ tech: TOX, kit: { ammo: 'toxin-rounds' } });
+    expect(reread(g)!.game).toEqual(g);
+    expect(JSON.parse(encodeSave(g, NOW)).v).toBe(28);
+    const code = importCode(exportCode(encodeSave(g, NOW)));
+    expect(code.ok && code.save.game.kit).toEqual({ ammo: 'toxin-rounds' });
+  });
+
+  it('a pick without its unlock reads as none, a Mk alone is dropped, a card of the other slot is none', () => {
+    expect(expectClean({ ammo: 'toxin-rounds' }, TECH_BOTH)).toBeUndefined();
+    expect(expectClean({ ammo: 'toxin-rounds' }, ['toxin-rounds-mk2'])).toBeUndefined();
+    expect(expectClean({ throwable: 'toxin-rounds' }, TOX)).toBeUndefined();
+    expect(reread(camp({ tech: ['toxin-rounds-mk3'] }))!.game.tech).toBeUndefined();
+    expect(expectClean({ ammo: 'toxin-rounds' }, ['toxin-rounds'])).toEqual({
+      ammo: 'toxin-rounds',
+    });
+  });
+
+  it('look-alike and hostile spellings of the card are none', () => {
+    const ids = [
+      'Toxin-Rounds',
+      'toxin-rounds ',
+      'toxin\u{2011}rounds',
+      'toxin-rounds\u{200b}',
+      '\u{202e}toxin-rounds',
+      'toxin-r\u{43e}unds',
+      't\u{43e}xin-rounds',
+      'toxin-rounds\u{0}',
+    ];
+    for (const id of ids) {
+      expect(expectClean({ ammo: id }, TOX), JSON.stringify(id)).toBeUndefined();
+      expect(reread(camp({ tech: [id as TechId] }))!.game.tech, JSON.stringify(id)).toBeUndefined();
+    }
+  });
+
+  it('an old v28 save written before Toxin existed loads unchanged', () => {
+    const old = camp({
+      tech: ['incendiary-rounds', 'shock-rounds', 'frag-grenades', 'frag-grenades-mk2'],
+      kit: { ammo: 'shock-rounds' },
+    });
+    const text = JSON.parse(encodeSave(old, NOW));
+    expect(JSON.stringify(text.game)).not.toContain('toxin');
+    expect(reread(old)!.game).toEqual(old);
+  });
+});
 
 describe('save: the starting pick (ID-284)', () => {
   it('is version 28; a game with no pick writes no key, and loads as before', () => {

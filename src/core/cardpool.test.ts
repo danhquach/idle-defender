@@ -144,6 +144,7 @@ describe('rarity', () => {
       'incendiary-rounds',
       'extended-mags',
       'shock-rounds',
+      'toxin-rounds',
       'barbed-wire',
       'aim-for-the-head',
       'hollow-point-rounds',

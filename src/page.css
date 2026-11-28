@@ -9086,19 +9086,27 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     display: none;
   }
 
-  /* Ammo & throwables (ID-284): five 40 px rows of one-line nodes (a 13 px name over a 13 px
-     face, 2 + 2 padding, 2 border: 32 of the 40 px, 4 px clear above and below) under a one-line
-     note: 28 + 8 + 1 + 4 + 4 + 17 + 18 + 5 x 40 = 280 of the 303 px. Its pills are the two
-     Research tabs, 112 px wide so "Ammo & throwables · 0/15" breaks to two lines, not an ellipsis. */
+  /* Ammo & throwables (ID-284, ID-285): six 38 px rows of one-line nodes (a 13 px name over a 13 px
+     face, 1 + 1 padding, 2 border: 30 px, 4 px clear above and below, so two nodes stay 8 px apart,
+     the phone's touch spacing).
+     Measured at 862 x 303: the chart starts 56 px down (28 px header, 24 px status band, 4 px of
+     padding) and its tier row is 16 px: 56 + 16 + 6 x 38 = 300 of the 303 px. Six 40 px rows came
+     to 312 and the last row ran off the screen. There is no room for the one-line note either, so
+     it is hidden on this shell; what it says is in the detail panel ("Can be the squad's starting
+     ammo card") and in Help. Its pills are the two Research tabs, 112 px wide so
+     "Ammo & throwables · 0/18" breaks to two lines, not an ellipsis. */
   .camp-scrim .research-chart[data-tab='kit'] {
     grid-template-columns: 48px repeat(3, minmax(0, 1fr));
-    grid-template-rows: auto repeat(5, 40px);
+    grid-template-rows: auto repeat(6, 38px);
+  }
+
+  .camp-scrim .research-chart[data-tab='kit'] .research-node {
+    margin: 4px var(--space-8);
+    padding-block: 1px;
   }
 
   .camp-scrim .research-kit-note {
-    margin: 0 0 var(--space-2);
-    font-size: 11px;
-    line-height: 15px;
+    display: none;
   }
 
   .camp-scrim .camp-dialog[data-tab='upgrades'] .camp-tabs .camp-tab,
@@ -12002,16 +12010,16 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   width: min(900px, 100%);
 }
 
-/* Ammo & throwables (ID-284): five rows (the cards) by three columns (Unlock, Mk II, Mk III), so
+/* Ammo & throwables (ID-284, ID-285): six rows (the cards) by three columns (Unlock, Mk II, Mk III), so
    a chain reads left to right. The same chart and lines, 444px at least: no sideways scroll. */
 .research-chart[data-tab='kit'] {
   grid-template-columns: 72px repeat(3, minmax(124px, 1fr));
-  grid-template-rows: auto repeat(5, 72px);
+  grid-template-rows: auto repeat(6, 72px);
   min-width: 444px;
 }
 
 .research-chart[data-tab='kit'] .research-lines {
-  grid-area: 2 / 2 / 7 / 5;
+  grid-area: 2 / 2 / 8 / 5;
 }
 
 .research-kit-note {

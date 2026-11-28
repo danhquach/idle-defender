@@ -301,6 +301,27 @@ describe('the offer spells out each pick (ID-097)', () => {
     });
   });
 
+  it('Toxin Rounds (ID-285): its name, the poison and burst numbers at each level and Mk', () => {
+    expect(CARD_NAME['toxin-rounds']).toBe('Toxin Rounds');
+    expect(CARD_TEXT['toxin-rounds']).toContain('4 s');
+    const lv1 = effectAt('toxin-rounds', 1, [])!;
+    expect(lv1.value).toBe('2%');
+    expect(lv1.post).toContain('a Shambler’s HP a second for 4 s');
+    expect(lv1.post).toContain('bursts for 15% within 50 px');
+    expect(effectAt('toxin-rounds', 2, [])!.value).toBe('3%');
+    expect(effectAt('toxin-rounds', 3, [])!.value).toBe('4%');
+    const II: TechId[] = ['toxin-rounds', 'toxin-rounds-mk2'];
+    const III: TechId[] = [...II, 'toxin-rounds-mk3'];
+    expect(effectAt('toxin-rounds', 1, II)!.value).toBe('2.3%');
+    expect(effectAt('toxin-rounds', 1, II)!.post).toContain('bursts for 17.25%');
+    expect(effectAt('toxin-rounds', 3, III)!.value).toBe('5.2%');
+    expect(effectAt('toxin-rounds', 3, III)!.post).toContain('bursts for 19.5%');
+    expect(cardPitch(at('incendiary-rounds', 2), 'toxin-rounds').replace).toEqual({
+      warning: 'Replaces Incendiary Rounds Lv 2. Its levels are lost.',
+      swap: 'Incendiary Rounds Lv 2 → Toxin Rounds Lv 1',
+    });
+  });
+
   it('the other ammo card warns what it replaces, with what you’d hold before and after', () => {
     const p = cardPitch(at('incendiary-rounds', 2), 'shock-rounds');
     expect(p.tag).toBe('New');

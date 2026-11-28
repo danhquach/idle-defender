@@ -154,7 +154,7 @@ export function withRef(
  */
 export function withKit(
   game: GameState,
-  ammo: 'incendiary-rounds' | 'shock-rounds' | null,
+  ammo: 'incendiary-rounds' | 'shock-rounds' | 'toxin-rounds' | null,
   throwable: 'frag-grenades' | 'flashbang' | 'molotov' | null,
   mk: 0 | 1 | 2 = 2,
 ): GameState {

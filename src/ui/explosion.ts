@@ -5,8 +5,8 @@
 import { project, TILT, type Camera } from './projection.ts';
 import type { ArtId } from './sprites.ts';
 
-/** Which explosion: a fireball (frag, airstrike) or a flashbang's white pop. */
-export type BlastKind = 'fire' | 'white';
+/** Which explosion: a fireball (frag, airstrike), a flashbang's white pop or a Toxin burst's green one (ID-285). */
+export type BlastKind = 'fire' | 'white' | 'toxic';
 
 /**
  * A fireball's flip-book (ID-107), over its life `u` (0 just gone off, 1 gone): the `pop`
@@ -84,6 +84,13 @@ export const BLAST = {
     ring: '#e6f1f8',
     smoke: '#c9cfd4',
   },
+  // A Toxin burst (ID-285): the same pop in green (hue about 135°), a ring and rising puffs.
+  toxic: {
+    flash: ['#8be89c', '#2aa84a'],
+    // A light ring (PM, ID-285) so the burst's edge holds over dark-green moss on the ground.
+    ring: '#7cf29a',
+    smoke: '#4fb868',
+  },
 } as const;
 
 /** A filled disc on screen: a burst of light or a puff, both a soft radial fade. */
@@ -148,7 +155,7 @@ export function blastLook(
   const Z = R * cam.zoom;
   const px = (share: number): number => Math.max(BLAST.min, share * Z);
   const c = project({ x, y }, cam);
-  const W = BLAST.white;
+  const W = BLAST[kind === 'toxic' ? 'toxic' : 'white'];
   let ring: BlastLook['ring'] = null;
   if (t < BLAST.ring.until) {
     const k = t / BLAST.ring.until;

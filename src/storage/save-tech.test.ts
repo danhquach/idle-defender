@@ -119,8 +119,8 @@ describe('save: Research Center (ID-263)', () => {
     expect(expectClean(lookalikes)).toEqual([]);
   });
 
-  it('junk entries before the valid ids: nothing researched (the size cap, twice the 29 nodes, comes first)', () => {
-    const junk = Array.from({ length: 58 }, (_, i) => 'junk' + i);
+  it('junk entries before the valid ids: nothing researched (the size cap, twice the 32 nodes, comes first)', () => {
+    const junk = Array.from({ length: 64 }, (_, i) => 'junk' + i);
     expect(expectClean([...junk, 'reinforced-wall', 'razor-wire'])).toEqual([]);
     expect(expectClean([...junk.slice(0, 5), 'reinforced-wall'])).toEqual(['reinforced-wall']);
   });
@@ -173,9 +173,9 @@ describe('save: Tier 4 combos (ID-264, no version bump)', () => {
   ];
   const COMBOS: TechId[] = ['wall-machine-gun', 'shock-net', 'tar-moat'];
 
-  it('ID-284 bumped the version to 28 and the cap to twice the 29 nodes', () => {
+  it('ID-284 bumped the version to 28; ID-285 kept it and the cap is twice the 32 nodes', () => {
     expect(SAVE_VERSION).toBe(28);
-    expect(TECH_IDS.length).toBe(29);
+    expect(TECH_IDS.length).toBe(32);
   });
 
   it('a combo with both parents loads; a combo alone, or with one parent, is dropped', () => {
@@ -248,8 +248,8 @@ describe('save: Tier 4 combos (ID-264, no version bump)', () => {
     ]);
   });
 
-  it('more than 58 entries: the list is cut first, so combos past the cut are lost', () => {
-    const pad = Array.from({ length: 58 }, (_, i) => 'pad' + i);
+  it('more than 64 entries: the list is cut first, so combos past the cut are lost', () => {
+    const pad = Array.from({ length: 64 }, (_, i) => 'pad' + i);
     expect(expectClean([...pad, ...TECH_IDS])).toEqual([]);
     expect(expectClean([...TECH_IDS, ...pad])).toEqual([...TECH_IDS]);
     expect(expectClean(Array.from({ length: 2000 }, () => 'shock-net'))).toEqual([]);

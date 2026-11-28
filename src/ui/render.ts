@@ -3682,9 +3682,13 @@ function explosions(
     if (look) out.push({ kind, x, y, width, u, look });
   };
   for (const b of scene.blasts) {
-    const flash = b.skill === 'flashbang';
     const u = (scene.time - b.at) / SKILL_FLASH;
-    // A Flashbang's blast is as wide as it was thrown (ID-284).
+    // A Flashbang's blast is as wide as it was thrown (ID-284); a Toxin burst (ID-285) is green.
+    if (b.skill === 'toxin') {
+      add('toxic', b.x, b.y, b.radius ?? CARD.toxin.radius, FIREBALL_WIDTH.airstrike, u, b.at);
+      continue;
+    }
+    const flash = b.skill === 'flashbang';
     const r = flash ? (b.radius ?? CARD.flashbang.radius) : SKILLS.airstrike.radius;
     add(flash ? 'white' : 'fire', b.x, b.y, r, FIREBALL_WIDTH.airstrike, u, b.at);
   }
@@ -3727,8 +3731,8 @@ function drawBlastAir(
   still: boolean,
 ): void {
   for (const e of all) {
-    if (e.kind === 'white') {
-      paintDiscs(ctx, e.look.air, BLAST.white.flash[1]);
+    if (e.kind === 'white' || e.kind === 'toxic') {
+      paintDiscs(ctx, e.look.air, BLAST[e.kind].flash[1]);
       continue;
     }
     const base = art[FIREBALL.art.ball];
@@ -4346,6 +4350,114 @@ function drawBurn(
     ctx,
     fireLook(id, size, { h, w: (img.width / img.height) * h }, feet, pose, k, clock, cam),
   );
+}
+
+/**
+ * A poisoned enemy's look (ID-285): a cool, dark green wash over its body (hue about 135°, apart
+ * from acid #a6e22e, the boss's poison #b6e03a and the wall gun's mint) and `bubbles` pale green
+ * bubbles rising off it, each `period` s from the torso to `rise` of its height above, seeded by
+ * the enemy's id so a replay matches. `tint` is the wash's share of the body's height across,
+ * `alpha` its strength; `out` the seconds it takes to fade once the poison ends. With Reduce
+ * motion (clock 0) the bubbles hold still.
+ */
+export const TOXIN = {
+  tint: '#2aa84a',
+  tintR: 0.5,
+  tintAlpha: 0.38,
+  bubble: '#8be89c',
+  bubbles: 3,
+  period: 1.2,
+  rise: 0.7,
+  r: 0.05,
+  least: 1.5,
+  alpha: 0.8,
+  out: 0.4,
+} as const;
+
+/** How strongly `e` shows poisoned at `time` (ID-285): 1 while it runs, fading to 0 over `TOXIN.out` after. */
+export function toxHeat(time: number, e: { toxUntil?: number }): number {
+  const until = e.toxUntil ?? 0;
+  if (until <= 0) return 0;
+  return time < until ? 1 : Math.max(0, 1 - (time - until) / TOXIN.out);
+}
+
+/** One rising bubble on screen: its centre, radius and see-through alpha. */
+export interface ToxBubble {
+  x: number;
+  y: number;
+  r: number;
+  alpha: number;
+}
+
+/**
+ * A poisoned body's wash and bubbles (see `TOXIN`) on a body `h` high and `w` wide whose feet
+ * are at `feet`, in `pose`, at strength `k` (`toxHeat` × its fade), `clock` s on.
+ */
+export function toxinLook(
+  id: number,
+  feet: Point,
+  h: number,
+  w: number,
+  pose: Readonly<Pose>,
+  k: number,
+  clock: number,
+  cam: Camera,
+): { x: number; y: number; r: number; alpha: number; bubbles: ToxBubble[] } {
+  const x = feet.sx + pose.dx * cam.zoom;
+  const y = feet.sy - pose.lift * cam.zoom - h * 0.55;
+  const H = Math.max(h, w * BURN.squat);
+  const bubbles: ToxBubble[] = [];
+  for (let i = 0; i < TOXIN.bubbles; i++) {
+    const phase = (clock / TOXIN.period + fireRoll(id, i, 11)) % 1;
+    const across = (fireRoll(id, i, 12) - 0.5) * w * 0.7;
+    bubbles.push({
+      x: x + across,
+      y: y + H * 0.2 - phase * TOXIN.rise * H,
+      r: Math.max(TOXIN.least, TOXIN.r * H * (0.7 + 0.6 * fireRoll(id, i, 13))),
+      alpha: TOXIN.alpha * k * Math.sin(Math.PI * phase),
+    });
+  }
+  return { x, y, r: TOXIN.tintR * H, alpha: TOXIN.tintAlpha * k, bubbles };
+}
+
+/** A poisoned enemy's wash and rising bubbles (ID-285) over its sprite; nothing at 0 `heat`. */
+function drawToxin(
+  ctx: CanvasRenderingContext2D,
+  art: Art,
+  id: number,
+  kind: EnemyKind,
+  feet: Point,
+  pose: Readonly<Pose>,
+  heat: number,
+  clock: number,
+  cam: Camera,
+): void {
+  const k = heat * pose.alpha;
+  if (k <= 0) return;
+  const size = ENEMIES[kind].radius / ENEMY_RADIUS;
+  const img = art[ENEMY_ART[kind].walk[1]];
+  const h = ((STAND.enemy * size * img.height) / ART_PX) * cam.zoom;
+  const look = toxinLook(id, feet, h, (img.width / img.height) * h, pose, k, clock, cam);
+  ctx.save();
+  const wash = ctx.createRadialGradient(look.x, look.y, 0, look.x, look.y, look.r);
+  wash.addColorStop(0, withAlpha(TOXIN.tint, look.alpha));
+  wash.addColorStop(1, withAlpha(TOXIN.tint, 0));
+  ctx.fillStyle = wash;
+  ctx.beginPath();
+  ctx.arc(look.x, look.y, look.r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = TOXIN.bubble;
+  ctx.fillStyle = withAlpha(TOXIN.bubble, 0.35);
+  ctx.lineWidth = Math.max(1, cam.zoom);
+  for (const b of look.bubbles) {
+    if (b.alpha <= 0) continue;
+    ctx.globalAlpha = b.alpha;
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 /** Paints a fire (ID-089, ID-107): its glow, its flames layer by layer, embers, then smoke. */
@@ -5146,6 +5258,7 @@ export function drawScene(
         const body = bossPose(zap ? twitch(pose, e.id, flameClock) : pose, e, wind);
         if (wind) drawWindUp(ctx, wind, ground, size, flameClock, cam);
         drawEnemy(ctx, art, e.kind, enemyArtOf(e), frame, ground, cam, body);
+        drawToxin(ctx, art, e.id, e.kind, ground, body, toxHeat(scene.time, e), flameClock, cam);
         const heat = burnHeat(scene.time, e, anim?.litAt(e.id) ?? -Infinity);
         drawBurn(ctx, art, e.id, e.kind, ground, body, heat, flameClock, cam);
         if (zap) drawShock(ctx, art, e.id, e.kind, ground, body, flameClock, cam, heat > 0);
@@ -5171,6 +5284,7 @@ export function drawScene(
         const ground = project({ x: e.x, y: e.y }, cam);
         const body = drawDeath(ctx, art, e, since, scene.seed ?? 0, ground, cam, anim);
         // A burning body keeps burning as it dies, fading with it.
+        drawToxin(ctx, art, e.id, e.kind, ground, body, toxHeat(scene.time, e), flameClock, cam);
         const heat = burnHeat(scene.time, e, c.litAt);
         drawBurn(ctx, art, e.id, e.kind, ground, body, heat, flameClock, cam);
       },

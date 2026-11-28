@@ -140,6 +140,21 @@ describe('the starting pick on the squad screen (ID-284)', () => {
     expect(list.hidden).toBe(true);
   });
 
+  it('three ammo cards unlocked (ID-285): None and each, Toxin Rounds last with its Lv 1 effect', () => {
+    const { root, h } = hud();
+    h.showResult(squadStart(camp(['incendiary-rounds', 'shock-rounds', 'toxin-rounds'])));
+    buttons(root)[0]!.click();
+    expect(options(root).map((o) => o.querySelector('.hud-kit-option-name')!.textContent)).toEqual([
+      KIT_NONE,
+      'Incendiary Rounds',
+      'Shock Rounds',
+      'Toxin Rounds',
+    ]);
+    expect(options(root)[3]!.textContent).toContain('2%');
+    options(root)[3]!.click();
+    expect(root.querySelector<HTMLElement>('.hud-kit-list')!.hidden).toBe(true);
+  });
+
   it('a choice goes to the app, the list closes and the keyboard returns to the button', () => {
     const { root, h, picks } = hud();
     h.showResult(squadStart(camp(['incendiary-rounds', 'shock-rounds'])));

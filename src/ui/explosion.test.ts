@@ -66,6 +66,40 @@ describe('fireball flip-book (ID-107)', () => {
   });
 });
 
+describe('Toxin burst (ID-285)', () => {
+  const toxic = (u: number, still = false) =>
+    blastLook('toxic', 800, 300, 50, u, blastSeed(800, 300, 2), CAM, still);
+
+  it('is the white pop’s shape in green: a ring, puffs, a flash, no scorch, gone at the end', () => {
+    const start = toxic(0.02)!;
+    expect(start.scorch).toBeNull();
+    expect(start.ring!.colour).toBe(BLAST.toxic.ring);
+    expect(start.air.find((d) => d.colour === BLAST.toxic.flash[0])).toBeDefined();
+    const late = toxic(0.6)!;
+    expect(late.ring).toBeNull();
+    expect(late.air.every((d) => d.colour === BLAST.toxic.smoke)).toBe(true);
+    expect(toxic(1)).toBeNull();
+    expect(toxic(0.4)).toEqual(toxic(0.4));
+  });
+
+  it('its colours are not the flashbang’s, and the ring stays within about its reach', () => {
+    expect(BLAST.toxic.ring).not.toBe(BLAST.white.ring);
+    expect(BLAST.toxic.flash[0]).not.toBe(BLAST.white.flash[0]);
+    expect(toxic(0.02)!.ring!.r).toBeLessThanOrEqual(50 * BLAST.ring.r[1] + 1e-9);
+    for (const u of [0, 0.05, 0.09]) {
+      const flash = toxic(u)!.air.find((d) => d.colour === BLAST.toxic.flash[0])!;
+      expect(flash.r).toBeLessThanOrEqual(50 + 1e-9);
+    }
+  });
+
+  it('Reduce motion holds its pop and only fades it', () => {
+    const a = toxic(0.02, true)!;
+    const b = toxic(0.5, true)!;
+    expect(a.ring!.r).toBe(b.ring!.r);
+    expect(b.ring!.alpha).toBeLessThan(a.ring!.alpha);
+  });
+});
+
 describe('flashbang white pop (ID-107)', () => {
   it('a dimmed flash, a soft ring and pale smoke; no scorch', () => {
     const start = white(0.02)!;

@@ -41,15 +41,16 @@ const ARMS: Record<string, { n: number; level: number; tech?: TechId[] }> = {
 
 /**
  * Digest and RNG position (`rng.s`) of each arm's finished horde, recorded on origin/main at
- * 0.5.206 (Node 25); re-recorded in ID-287 (non-fighting jobs reload slower).
+ * 0.5.206 (Node 25); re-recorded in ID-287 (non-fighting jobs reload slower). ID-285: Toxin Rounds
+ * joins every fight's offer pool, so every arm's offers reshuffle; re-recorded (Node 25) after checking
+ * that the old values come back with Toxin left out of `SQUAD_CARDS`.
  */
 const RECORDED: Record<string, [string, number]> = {
-  'bare-h4': ['d85f9384:5351', 1257596436],
-  'bare-h9': ['47589016:6529', 199658554],
-  'empty-h9': ['47589016:6529', 199658554],
-  // ID-284: Hand-loads is now the first-round crit, so the two arms that research it moved (Node 25).
-  'tier13-h4': ['4deede3a:5571', 1393055130],
-  'tier13-h9': ['a71d5a58:6717', 32979954],
+  'bare-h4': ['f29254fa:5366', 1257596436],
+  'bare-h9': ['7a4d3443:6775', 2297896252],
+  'empty-h9': ['7a4d3443:6775', 2297896252],
+  'tier13-h4': ['e6a7b4c9:5759', 2486717073],
+  'tier13-h9': ['5254e306:6932', 1687874776],
 };
 
 /**
@@ -57,11 +58,10 @@ const RECORDED: Record<string, [string, number]> = {
  * RNG positions are the same; only float text in the state differs. Taken from the branch on CI.
  */
 const NODE_22: Record<string, [string, number]> = {
-  // ID-287: taken from the branch on CI after the re-record.
-  'bare-h9': ['403a5c4c:6524', 199658554],
-  'empty-h9': ['403a5c4c:6524', 199658554],
-  // ID-284: taken from the branch on CI (Hand-loads researched).
-  'tier13-h9': ['21108b0a:6712', 32979954],
+  // ID-285: taken from the branch on CI after the re-record.
+  'bare-h9': ['5ab48fd3:6770', 2297896252],
+  'empty-h9': ['5ab48fd3:6770', 2297896252],
+  'tier13-h9': ['fcce4aec:6927', 1687874776],
 };
 
 /** Node's major version: picks the digests recorded on that runtime. */

@@ -18,8 +18,8 @@ const withScrap = (scrap: number, tech?: TechId[]): GameState => {
 };
 
 describe('the table', () => {
-  it('has 29 nodes in 9 branches, costing 47,600 in all (ID-284: 14, 25,800 before)', () => {
-    expect(TECH_IDS.length).toBe(29);
+  it('has 32 nodes in 10 branches, costing 51,600 in all (ID-285: 29, 47,600 before; ID-284: 14, 25,800)', () => {
+    expect(TECH_IDS.length).toBe(32);
     expect(Object.keys(TECH).sort()).toEqual([...TECH_IDS].sort());
     expect(TECH_BRANCHES).toEqual([
       'wall',
@@ -28,14 +28,15 @@ describe('the table', () => {
       'mortars',
       'incendiary',
       'shock',
+      'toxin',
       'frag',
       'flashbang',
       'molotov',
     ]);
-    expect(TECH_IDS.reduce((sum, id) => sum + TECH[id].cost, 0)).toBe(47600);
+    expect(TECH_IDS.reduce((sum, id) => sum + TECH[id].cost, 0)).toBe(51600);
     const kit = TECH_IDS.filter((id) => TECH_TABS.kit.includes(TECH[id].branch as never));
-    expect(kit.length).toBe(15);
-    expect(kit.reduce((sum, id) => sum + TECH[id].cost, 0)).toBe(21800);
+    expect(kit.length).toBe(18);
+    expect(kit.reduce((sum, id) => sum + TECH[id].cost, 0)).toBe(25800);
     // The first 14 ids keep their place: the order is save format.
     expect(TECH_IDS.slice(0, 14)[13]).toBe('tar-moat');
     expect(
@@ -48,7 +49,7 @@ describe('the table', () => {
 
   it('gives each of the two tabs its branches, and every branch to one tab', () => {
     expect(TECH_TABS.upgrades).toEqual(['wall', 'wire', 'ammo', 'mortars']);
-    expect(TECH_TABS.kit).toEqual(['incendiary', 'shock', 'frag', 'flashbang', 'molotov']);
+    expect(TECH_TABS.kit).toEqual(['incendiary', 'shock', 'toxin', 'frag', 'flashbang', 'molotov']);
     expect([...TECH_TABS.upgrades, ...TECH_TABS.kit]).toEqual([...TECH_BRANCHES]);
   });
 
@@ -56,6 +57,7 @@ describe('the table', () => {
     for (const id of [
       'incendiary-rounds',
       'shock-rounds',
+      'toxin-rounds',
       'frag-grenades',
       'flashbang',
       'molotov',
@@ -81,6 +83,9 @@ describe('the table', () => {
       'molotov',
       'molotov-mk2',
       'molotov-mk3',
+      'toxin-rounds',
+      'toxin-rounds-mk2',
+      'toxin-rounds-mk3',
     ]);
   });
 
@@ -254,6 +259,7 @@ describe('techReady (the top bar’s dot)', () => {
       'quick-mortars',
       'incendiary-rounds',
       'shock-rounds',
+      'toxin-rounds',
       'frag-grenades',
       'flashbang',
       'molotov',
