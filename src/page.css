@@ -8598,9 +8598,17 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     padding: var(--space-4);
   }
 
+  /* --- The squad / result panel (ID-274), between the rails: a definite height (the foot
+     column below needs one), a header across the top, the body at the left, and the foot
+     (the horde's card, the skills, Start) as a column at the right, so the squad, the horde
+     choice and Start show in one view. A short result fills the height too, by intent. --- */
   .hud-result.hud-debrief {
     top: 4px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(220px, 30vw, 260px);
+    grid-template-rows: auto minmax(0, 1fr);
     max-width: calc(100vw - 96px);
+    height: calc(100dvh - 8px);
     max-height: calc(100dvh - 8px);
     width: min(780px, calc(100vw - 96px));
   }
@@ -8796,6 +8804,214 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     transform: translateX(-50%);
     font-size: 9px;
     line-height: 12px;
+  }
+
+  /* The header is one row: the title, the numbers, the tags, "Details" (a 44 px target). */
+  .hud-debrief .hud-result-head {
+    grid-column: 1 / -1;
+    flex-flow: row wrap;
+    align-items: center;
+    gap: var(--space-4) var(--space-12);
+    padding-block: 0;
+  }
+
+  .hud-debrief .hud-result-title {
+    text-align: left;
+  }
+
+  .debrief-stats,
+  .debrief-chips {
+    justify-content: flex-start;
+  }
+
+  .debrief-chips .debrief-details {
+    min-height: 44px;
+  }
+
+  .hud-debrief .hud-result-scroll {
+    grid-column: 1;
+    padding-inline: var(--space-12);
+  }
+
+  /* The squad as one grid of 96 px cells, 8 px apart: "Best gun for everyone" and "Change
+     squad" are cells beside the cards (their wrappers drop out of the layout; the DOM and
+     focus order stay: Best guns, Change squad, then the cards). The title is read out only. */
+  section.debrief-squad {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    gap: var(--space-8);
+  }
+
+  .debrief-squad-head,
+  .squad-grid {
+    display: contents;
+  }
+
+  .debrief-squad-title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  section.debrief-squad > .debrief-bench,
+  section.debrief-squad > .debrief-empty {
+    grid-column: 1 / -1;
+    margin: 0;
+  }
+
+  .debrief-change-squad,
+  .debrief-best-guns {
+    min-height: 44px;
+    padding: 0 var(--space-6);
+    line-height: 1.15;
+  }
+
+  /* The whole card is one tap target, 44 px tall at least: the name button's overlay. A
+     card holds no other control. */
+  .squad-card {
+    position: relative;
+    min-height: 44px;
+  }
+
+  .squad-card-open::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+  }
+
+  /* Someone asking to join: two 220 px columns where they fit (862), else stacked rows, 8 px
+     apart; the text 32 px tall, the answers 44 px. */
+  .debrief-join {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: var(--space-8);
+  }
+
+  .join-row {
+    align-items: center;
+    min-height: 44px;
+  }
+
+  /* Plain text, centred on the 44 px answers by the row (a flex line split the name from the
+     rest and dropped the space before its dot). */
+  .join-who {
+    font-size: var(--text-sm);
+    line-height: 16px;
+  }
+
+  /* The foot is the right column: the horde's card scrolls on its own, the skills and
+     Start stay pinned under it. */
+  .hud-debrief .hud-result-foot {
+    grid-column: 2;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    min-height: 0;
+    padding: var(--space-8) var(--space-12);
+    border-top: 0;
+    border-left: 1px solid var(--color-divider);
+  }
+
+  /* Sized to its content (no empty box under it), scrolling only when taller than the
+     column; the skills and Start sit at the column's foot. */
+  .hud-debrief .hud-horde-pick {
+    flex: 0 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .hud-debrief .hud-start-row {
+    flex: none;
+    margin-top: auto;
+  }
+
+  .hud-debrief .hud-skill-pick > .hud-horde-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .hud-debrief .hud-skill-options {
+    flex-flow: row wrap;
+    gap: var(--space-8);
+  }
+
+  .hud-debrief .hud-skill-option {
+    flex: 1 1 88px;
+    width: auto;
+    min-width: 0;
+  }
+
+  /* A win's weapons: the gun's name on its own line, wrapping between words (never cut with
+     "…"), the level and DPS on one line under it. Three chips to a row. */
+  /* The icon stays beside the words, which wrap by whole words in what is left: stacking
+     the icon over them made a 667 px chip twice as tall and pushed its DPS under the cue. */
+  .tile.gun-chip {
+    flex-wrap: nowrap;
+    gap: var(--space-2) var(--space-4);
+    padding: var(--space-4) var(--space-16) var(--space-4) var(--space-6);
+  }
+
+  .gun-chip .tile-icon {
+    width: 28px;
+    height: 28px;
+  }
+
+  .gun-chip-text {
+    flex: 1 1 0;
+    min-width: 0;
+    flex-flow: row wrap;
+    align-content: flex-start;
+    align-items: baseline;
+    column-gap: var(--space-4);
+  }
+
+  .gun-chip-name {
+    display: contents;
+  }
+
+  .gun-chip-gun {
+    flex: 0 0 100%;
+    order: 0;
+    overflow-wrap: break-word;
+  }
+
+  .gun-chip-lost .gun-chip-lv,
+  .gun-chip-lost .gun-chip-gun {
+    color: var(--color-text-muted);
+    text-decoration: line-through;
+  }
+
+  .gun-chip-lv {
+    order: 1;
+    font-size: var(--text-sm);
+    font-weight: 600;
+  }
+
+  .gun-chip-lv::after {
+    content: ' \00B7';
+    content: ' \00B7' / '';
+  }
+
+  .gun-chip-power {
+    order: 2;
+    white-space: nowrap;
+  }
+
+  .gun-chip-tag {
+    flex: 0 0 100%;
+    order: 3;
+  }
+
+  /* The "more below" cue: its fade is solid behind the words, so a cut-off card's name
+     never shows through them. */
+  .hud-debrief .hud-result-scroll[data-more]::after {
+    background: linear-gradient(to bottom, transparent, var(--color-panel-solid) 40%);
   }
 }
 
