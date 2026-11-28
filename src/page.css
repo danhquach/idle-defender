@@ -7448,8 +7448,9 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 }
 
 /* The intro (ID-106): a title screen over the camp at launch, then a first-launch card.
-   The title art fills the window (cover, kept centred on the survivors); a shade darkens
-   the sky under the title and the ground under the buttons. */
+   The title art fills the window (cover, kept on the survivors); a shade darkens the sky
+   under the title and the ground under the buttons. A wide screen fits the whole painting
+   to its height instead (ID-282). e2e/intro-art.spec.ts checks every screen shape. */
 .intro-scrim {
   position: fixed;
   inset: 0;
@@ -7481,12 +7482,13 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 }
 
 /* A tall phone (ID-281): the art sits lower and is aimed at the three survivors on its left,
-   so all of them show under the tagline; its top and bottom fade into the page. */
+   so all of them show under the tagline (the first one's rifle too, ID-282); its top and
+   bottom fade into the page. */
 @media (max-aspect-ratio: 3/4) {
   .intro-art {
     top: 22%;
     height: 64%;
-    object-position: 8% 50%;
+    object-position: 3% 50%;
     -webkit-mask-image: linear-gradient(
       transparent,
       var(--color-intro-art-mask) 12%,
@@ -7599,6 +7601,70 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 .intro-tagline {
   color: var(--color-text);
   text-shadow: 0 1px 6px var(--color-intro-title-edge);
+}
+
+/* Wider than 3:4 and tall enough (ID-282): the art is height-fitted here (cover on a screen
+   up to 3:2 is height-bound), so it is aimed far left to keep the first survivor's rifle on
+   screen, the title shrinks with the screen height so it sits in the sky above the
+   survivors' heads, and the buttons sit low, clear of their upper bodies. These blocks must come after the base .intro-art, .intro-head and
+   .intro-logo rules, which they override. */
+@media (aspect-ratio > 3/4) and (min-height: 541px) {
+  .intro-art {
+    object-position: 4% 60%;
+  }
+
+  .intro-head {
+    padding-top: 2dvh;
+  }
+
+  .intro-logo {
+    max-height: min(19dvh, calc(26.8dvh - 68px));
+  }
+
+  /* The buttons tuck down so they stay below the survivors' knees: Continue and New game
+     side by side (one row, not two), tighter gaps, less room under them. */
+  .intro-foot {
+    gap: var(--space-6);
+    padding-bottom: calc(var(--space-8) + env(safe-area-inset-bottom, 0px));
+  }
+
+  .intro-foot .intro-actions {
+    flex-direction: row;
+  }
+
+  .intro-foot .intro-action {
+    flex: 1;
+  }
+}
+
+/* 3:2 and wider (ID-282): cover would crop the sky and the survivors' boots, so the box is
+   the painting itself, full height, with its left and right edges fading into
+   the page (the left fade stops short of the first survivor's rifle). At exactly 3:2 both
+   rules draw the same picture. */
+@media (min-aspect-ratio: 3/2) and (min-height: 541px) {
+  .intro-art {
+    /* Left of centre: a fifth of the spare width on the left, so the survivors clear the
+       centred buttons; at exactly 3:2 there is none and the painting fills the screen. */
+    inset: 0 auto 0 20%;
+    width: auto;
+    height: 100%;
+    aspect-ratio: 1152 / 769;
+    transform: translateX(-20%);
+    -webkit-mask-image: linear-gradient(
+      to right,
+      transparent,
+      var(--color-intro-art-mask) 2%,
+      var(--color-intro-art-mask) 92%,
+      transparent
+    );
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      var(--color-intro-art-mask) 2%,
+      var(--color-intro-art-mask) 92%,
+      transparent
+    );
+  }
 }
 
 .intro-actions {
