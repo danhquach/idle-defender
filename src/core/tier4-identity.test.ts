@@ -60,8 +60,8 @@ const NODE_22: Record<string, [string, number]> = {
   // ID-287: taken from the branch on CI after the re-record.
   'bare-h9': ['403a5c4c:6524', 199658554],
   'empty-h9': ['403a5c4c:6524', 199658554],
-  // ID-284: 'tier13-h9' (Hand-loads researched) has no Node 22 digest until CI gives one; it
-  // reads the Node 25 one above and fails on CI, whose actual value is then pinned here.
+  // ID-284: taken from the branch on CI (Hand-loads researched).
+  'tier13-h9': ['21108b0a:6712', 32979954],
 };
 
 /** Node's major version: picks the digests recorded on that runtime. */
