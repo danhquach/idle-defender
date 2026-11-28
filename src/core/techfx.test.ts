@@ -327,4 +327,17 @@ describe('Armour-piercing', () => {
     expect(loss([], 'scavenged-ammo')).toBeCloseTo(7, 9);
     expect(loss(AP, 'scavenged-ammo', 'turret:1')).toBeCloseTo(7, 9);
   });
+
+  it('works while Toxin Rounds is held too (ID-285): its poison tick comes on top of the bullet', () => {
+    const AP: TechId[] = ['hand-loads', 'armour-piercing'];
+    const run = (tech: readonly TechId[]): number => {
+      const s = at('toxin-rounds', 1, tech);
+      const e = brute(s);
+      shoot(s, { x: 690, y: ROW4, damage: 10 });
+      const t = tick(s, STEP);
+      return 1000 - find(t, e.id).hp - find(t, e.id).toxDps! * STEP;
+    };
+    expect(run(AP)).toBeCloseTo(10 - 3 * 0.8, 9);
+    expect(run([])).toBeCloseTo(7, 9);
+  });
 });

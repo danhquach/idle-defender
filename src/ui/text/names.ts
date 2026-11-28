@@ -311,6 +311,9 @@ export const TECH_NAME: Readonly<Record<TechId, string>> = {
   molotov: 'Molotov',
   'molotov-mk2': 'Molotov Mk II',
   'molotov-mk3': 'Molotov Mk III',
+  'toxin-rounds': 'Toxin Rounds',
+  'toxin-rounds-mk2': 'Toxin Mk II',
+  'toxin-rounds-mk3': 'Toxin Mk III',
 };
 
 /** Each node in one word, for a Tier 4 combo's locked face ("Needs Armour + Spiked"; ID-264). */
@@ -344,6 +347,9 @@ export const TECH_SHORT: Readonly<Record<TechId, string>> = {
   molotov: 'Molotov',
   'molotov-mk2': 'Molotov Mk II',
   'molotov-mk3': 'Molotov Mk III',
+  'toxin-rounds': 'Toxin',
+  'toxin-rounds-mk2': 'Toxin Mk II',
+  'toxin-rounds-mk3': 'Toxin Mk III',
 };
 
 /** A number to at most 3 decimals, no trailing zeros: 0.345, 3.5, 4. */
@@ -366,7 +372,7 @@ export const TECH_EFFECT: Readonly<Record<TechId, string>> = {
     "An enemy entering Barbed Wire is stunned for 1 s (then can't be stunned again for 3 s).",
   'hand-loads': `The first round of every squad gun's magazine always crits, at ×${TOP_CRIT} or the survivor's own crit multiplier when that is higher.`,
   'armour-piercing':
-    'While the squad holds Heavy Rounds, Incendiary Rounds, Shock Rounds, Piercing Rounds or Scavenged Ammo, its bullets ignore 20% of armour.',
+    'While the squad holds Heavy Rounds, Incendiary Rounds, Shock Rounds, Toxin Rounds, Piercing Rounds or Scavenged Ammo, its bullets ignore 20% of armour.',
   'quick-mortars': 'Oil Bomb fires every 16 s instead of 20 (the first throw is as soon as ever).',
   'wide-slick': 'Oil Bomb slicks are 25% wider.',
   'napalm-mortar': 'Oil Bomb slicks land already burning, and stay for their full 10 s.',
@@ -411,6 +417,16 @@ export const TECH_EFFECT: Readonly<Record<TechId, string>> = {
     CARD.molotov.seconds.map((x) => x + MK.fireSeconds),
     sec,
   )} s), in place of the ${mkPct(MK.fire[0])}.`,
+  // ID-285: the poison's share and the death burst each take their own Mk factor.
+  'toxin-rounds': 'Can be the squad’s starting ammo card.',
+  'toxin-rounds-mk2': `Poison ${mkPct(MK.toxin[0])} (${per(
+    CARD.toxin.share.map((x) => x * MK.toxin[0]),
+    pc,
+  )}% of a Shambler’s HP a second) and burst ${mkPct(MK.toxinBurst[0])} (${pc(CARD.toxin.burst * MK.toxinBurst[0])}%).`,
+  'toxin-rounds-mk3': `Poison ${mkPct(MK.toxin[1])} (${per(
+    CARD.toxin.share.map((x) => x * MK.toxin[1]),
+    pc,
+  )}%) and burst ${mkPct(MK.toxinBurst[1])} (${pc(CARD.toxin.burst * MK.toxinBurst[1])}%), in place of the ${mkPct(MK.toxin[0])}.`,
 };
 
 /** Each Research Center branch's name, the chart's rows (ID-263). */
@@ -421,6 +437,7 @@ export const TECH_BRANCH_NAME: Readonly<Record<TechBranch, string>> = {
   mortars: 'Mortars',
   incendiary: 'Incendiary',
   shock: 'Shock',
+  toxin: 'Toxin',
   frag: 'Frag',
   flashbang: 'Flashbang',
   molotov: 'Molotov',

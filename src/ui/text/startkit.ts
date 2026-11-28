@@ -17,7 +17,8 @@ export const KIT_LABEL: Readonly<Record<KitWords, string>> = {
 export const KIT_NONE = 'None';
 
 /** The line heading every list: what the slot rule does to the pick in a fight. */
-export const KIT_RULE = 'Picking the other card in a fight replaces this one. Its levels are lost.';
+export const KIT_RULE =
+  'Picking another card of this slot in a fight replaces this one. Its levels are lost.';
 
 /** The Mk a card has researched, as the list shows it: "Mk II", "Mk III", or empty with none. */
 export function kitMk(tech: readonly TechId[], card: UpgradeId): string {

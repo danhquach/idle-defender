@@ -1761,8 +1761,8 @@ Offered 1 of 3 on each fight level. Lost when the horde ends.
 
 Every card is grounded gear or tactics a group of survivors with guns could
 really use (ammo, scavenged kit, barricade work): no magic or energy effects.
-Incendiary Rounds and Shock Rounds are real-world special ammunition
-(incendiary and electroshock rounds), not magic. Every card changes the fight visibly within a wave of picking it, at the
+Incendiary Rounds, Shock Rounds and Toxin Rounds (ID-285) are real-world special ammunition
+(incendiary, electroshock and toxin-coated rounds), not magic. Every card changes the fight visibly within a wave of picking it, at the
 spacing real hordes have (see the ID-077 note below).
 
 - **Stat cards:** +damage, +fire rate, +range, bigger magazines, faster
@@ -1795,6 +1795,7 @@ spacing real hordes have (see the ID-077 note below).
   | Ricochet | behaviour | rare | A bullet's first hit bounces one new bullet to the nearest other enemy within 150 px, at **10%** damage; a bounce never bounces | 18% | 25% |
   | Incendiary Rounds | behaviour | rare | The enemy hit burns **3%** of this wave's Shambler HP a second for 3 s (ID-124; was a flat 1 DPS); a new hit resets it at the new hit's rate, never stacks | 6% | 9% (was 3 DPS) |
   | Shock Rounds | behaviour | rare | A squad bullet hit paralyses the enemy for **0.2 s** (half for a Brute, Swollen or Horror): it stops moving and attacking, then carries on. No damage. A hit during a paralysis doesn't extend it, and after a paralysis ends the enemy can't be paralysed again for **1 s** | 0.3 s | 0.4 s |
+  | Toxin Rounds (ID-285) | behaviour | rare | Ammo slot. A squad bullet hit poisons the enemy for **4 s**: **2%** of this wave's Shambler HP a second (`toxDps`, armour ignored, no white hit flash), fixed at the hit like Incendiary's burn. A new hit restarts the 4 s at the card's numbers then; it never stacks. An enemy that **dies while poisoned** bursts for **15%** of this wave's Shambler HP (`toxBurst`, armour ignored, like Frag Grenades) on every living enemy within **50 px**, and poisons them for 4 s at the dead one's rate. That poison carries **no burst** of its own, so a burst never chains. No synergy with the Oil Bomb or the Tar Moat: poison is not fire, so it lights neither | 3% | 4% |
   | Flashbang (ID-139; a skill before) | behaviour | rare | Throwable slot. Each survivor on the line carries **3** and gets one back every **10 s**, up to 3 (ID-178); the squad throws at most one every **1.5 s**, aimed as Frag Grenades is (within **600 px**, the most others within **100 px**, landing **0.6 s** later). It stuns (no moving, no attacking) every enemy within **100 px** for **3 s**. An enemy can't be stunned again until **3 s** after its stun ends, and isn't aimed at till then, so a group or a boss is never held for good. **Cost:** the squad's guns reach **15%** less while it is held (the glare). Its throws take no one's hands | 4 s | 5 s |
   | Molotov (ID-139; a skill before) | behaviour | rare | Throwable slot. Each survivor on the line carries **3** and gets one back every **12 s**, up to 3 (ID-178); the squad throws at most one every **1.5 s**, aimed as Frag Grenades is (within **600 px**, the most others within **50 px**, landing **0.6 s** later). It leaves a fire of **50 px** burning **4 s**, each second **10%** of this wave's Shambler HP to every enemy inside (`fireDps`). A fire overlapping an unlit Oil Bomb slick lights it (ID-181). **Cost:** enemies inside a fire move **30%** faster. Its throws take no one's hands | 6 s | 8 s |
   | Barbed Wire | barrier | rare | Coils strung across the field in the band **250–400 px** in front of the outermost layer, where most kills happen; enemies inside move **15%** slower and bleed **0.4%** of this wave's Shambler HP a second (ID-236); each row has **10** HP, more in a big wave, heals **0.3%** of its max a second, works again at **25%** once broken, and is rebuilt at each level-up (more below) | 25%; 0.8%; 20 HP; heals 0.6% | 35%; 1.2%; 30 HP; heals 1% |
@@ -1805,7 +1806,7 @@ spacing real hordes have (see the ID-077 note below).
   | Sandbags (ID-132) | barrier | rare | The outermost built layer takes **10%** less of every hit (an enemy's blow, a Swollen's blast, a slab), shown as a low layer of bags on the ground in front of each standing segment of it | 20% | 30% |
   | Scavenged Ammo (ID-132) | stat | rare | Each squad gun shot has a **20%** chance not to use a round, rolled on the fight's seeded RNG (a whole shot: every pellet of a shotgun's) | 30% | 40% |
 
-  Research Center (ID-263, §11) strengthens three of these cards: Razor Wire, Thick Coils and Electric Wire change Barbed Wire; Quick Mortars, Wide Slick and Napalm Mortar change Oil Bomb; Armour-piercing acts while Heavy Rounds, Incendiary, Shock, Piercing Rounds or Scavenged Ammo is held (Hand-loads made those five 10% stronger before ID-284; it now makes the first round of every magazine a crit, §11). A researched card is also offered a little more often. The ammo and throwable slot cards can also be unlocked as a starting pick and upgraded (Mk II, Mk III) in the Research Center (ID-284, §11).
+  Research Center (ID-263, §11) strengthens three of these cards: Razor Wire, Thick Coils and Electric Wire change Barbed Wire; Quick Mortars, Wide Slick and Napalm Mortar change Oil Bomb; Armour-piercing acts while Heavy Rounds, Incendiary, Shock, Toxin, Piercing Rounds or Scavenged Ammo is held (Hand-loads made the first five of those 10% stronger before ID-284; it now makes the first round of every magazine a crit, §11). A researched card is also offered a little more often. The ammo and throwable slot cards can also be unlocked as a starting pick and upgraded (Mk II, Mk III) in the Research Center (ID-284, §11).
 
   **Research Center Tier 4 (ID-264, §11).** Wall Machine Gun, Shock Net and Tar Moat are epic unique cards that join a fight's pool only when researched. No gate: an eligibility test such as the wall being hit was dead too (`crowded` held at 0 of 15 Horde 4 offers), so each is offered whenever it is in the pool, at the plain epic rate (Tier 4 adds no offer weight, `offerWeights` skips it). Three more epics halve Frag Grenades' and Concussion Rounds' share of epic rolls; a test holds the share of non-tech offer slots at 0.8 of the baseline or more with all three researched.
 
@@ -1977,13 +1978,15 @@ spacing real hordes have (see the ID-077 note below).
   are the biggest share of their fire. The steps still multiply with it
   (below). It is still unlocked by Horde 10's boss.
 
-  **One ammo slot (ID-097):** the squad holds at most one of Incendiary
-  Rounds and Shock Rounds; both stay in the pool all horde. Picking the one
-  held levels it up; picking the other replaces it: the new card starts at
+  **One ammo slot (ID-097, ID-285):** the squad holds at most one of Incendiary
+  Rounds, Shock Rounds and Toxin Rounds; all three stay in the pool all horde (Toxin Rounds is
+  ungated, like the other two: it is a rare behaviour card in `SQUAD_CARDS`, and its unlock node only
+  makes it a starting pick). Picking the one
+  held levels it up; picking another replaces it: the new card starts at
   level 1 and the old card and its levels are gone (it can come back in a
   later offer and replace the new one the same way, even when the held one
-  is at max). New hits use the new card from the next shot; burns and
-  paralyses already on enemies run out as they were.
+  is at max). New hits use the new card from the next shot; burns, paralyses and
+  poisons already on enemies run out as they were (a poison still bursts its enemy's death).
 
   **One throwable slot (ID-139):** the squad holds at most one of Frag
   Grenades, Flashbang and Molotov, so the fight never turns into a
@@ -2245,7 +2248,8 @@ spacing real hordes have (see the ID-077 note below).
   compounding Sharpshooter and Rapid Fire had carried the late hordes (flat
   steps at the old +20%/+15%/+15% still gave only 70%, 40%, 40%). Decided:
   Hordes 1–3 are sure wins (enemy HP eased, §5 and §9; ID-163: Horde 3 may
-  dent the wall on a few seeds, still won), Hordes 4–7 are won
+  dent the wall on a few seeds, still won; ID-285: on the bare base a Horde 3 seed whose offers never
+  bring the recruit, so one survivor fights alone, may be lost: with two on the line it is still won), Hordes 4–7 are won
   at the first try on most seeds, and from Horde 8 the hordes are walls the
   player farms past. The balance pass (ID-102) brought back Hordes 8–10's
   first-try target (at least 60%) and the late-horde test, with farming (§11
@@ -2984,7 +2988,7 @@ patrols above (no plazas, car, orders or deaths). Numbers are starting points, t
 - **Save v27 (ID-263):** `tech` (the Research Center nodes researched), written once there is one,
   read tolerantly; see Research Center, §11. An older save loads with nothing researched.
 - **Save v28 (ID-284):** `kit` (the ammo card and throwable picked for the next horde), written once
-  one is picked; 15 more ids in `tech`. See "Research Center: ammo and throwables", §11.
+  one is picked; 15 more ids in `tech` (ID-285 adds Toxin's three with no version bump, so 18). See "Research Center: ammo and throwables", §11.
 - **Medicine (ID-220):** between hordes, a resting survivor's Roster card has **Treat · 1
   Medicine** (`TREAT`): one Medicine ends the whole rest, so they can fight the next horde at
   full HP; with none in stock it reads "No Medicine", greyed. Hidden for anyone not resting
@@ -3927,8 +3931,9 @@ After Horde 50 the game does not end: it opens **Nightmare**, then **Hell**.
   offer rolls are unchanged (no new id is in its pool). The result screen's note and
   chip name the card; no radio part is found in a higher mode.
 - **Balance.** Nightmare starts where Normal ends (ID-223): a squad that just holds
-  Normal Horde 50 wins Nightmare Horde 1 at the first try on 20–70% of 20 seeds (ID-284: floor 30% → 20%, measured 4 of 20 at gun level 53,
-  9 of 20 at 54 before: Hand-loads lowered the Normal 50 hold by a level, so the squad is weaker, not Nightmare 1 harder)
+  Normal Horde 50 wins Nightmare Horde 1 at the first try on 15–70% of 20 seeds (ID-284: floor 30% → 20%, measured 4 of 20 at gun level 53,
+  9 of 20 at 54 before: Hand-loads lowered the Normal 50 hold by a level, so the squad is weaker, not Nightmare 1 harder; ID-285:
+  floor 20% → 15%, 3 of 20 at gun level 52 after Toxin Rounds reshuffled the offers; a further drop should fix the measurement, not the bound)
   (measured: gun level 54, 9 of 20; gun level 49, 10 of 20 before ID-224; with the reference player's research, ID-265: gun level 54, 9 of 20); a squad at 2× Normal
   Horde 50's Recommended Power (gun level 63), not gearing up between fights, is stopped by Nightmare Horde 20
   on most (measured: 20 of 20, at Hordes 6–12 since ID-265, 6–11 before it, 9–17 before ID-224; gearing up on Nightmare's drops it was
@@ -4185,7 +4190,7 @@ is unrelated: this feature is `tech` in the code.)
 | Thick Coils | Barbed Wire · 2 | 600 | Razor Wire | Barbed Wire rows have ×1.5 HP (at the pick, at each wave break and at the start) |
 | Electric Wire | Barbed Wire · 3 | 1,500 | Thick Coils | An enemy's first entry into a working row stuns it 1 s, then it can't be stunned again for 3 s (the Flashbang's own daze and immunity) |
 | Hand-loads | Ammo · 1 | 400 | - | The first round of every squad gun's magazine always crits, at ×3.25 or the survivor's own crit multiplier when that is higher (ID-284, rules below; before: the five ammo cards 10% stronger) |
-| Armour-piercing | Ammo · 2 | 1,200 | Hand-loads | While the squad holds Heavy Rounds, Incendiary, Shock, Piercing Rounds or Scavenged Ammo, its bullets ignore 20% of armour |
+| Armour-piercing | Ammo · 2 | 1,200 | Hand-loads | While the squad holds Heavy Rounds, Incendiary, Shock, Toxin, Piercing Rounds or Scavenged Ammo, its bullets ignore 20% of armour |
 | Quick Mortars | Mortars · 1 | 300 | - | Oil Bomb waits 16 s between throws, not 20 (the first throw is unchanged) |
 | Wide Slick | Mortars · 2 | 800 | Quick Mortars | Oil Bomb slicks are 25% wider (112.5 px) |
 | Napalm Mortar | Mortars · 3 | 2,000 | Wide Slick | Slicks land already burning, and keep their full 10 s |
@@ -4220,8 +4225,8 @@ is unrelated: this feature is `tech` in the code.)
   Incendiary Rounds do not exclude each other; with Napalm Mortar a slick lands lit, so Incendiary's
   light adds nothing there. Card texts show the researched numbers (`effectAt`, `cardPitch` in `ui/text/cards.ts`).
 - **Offer weight.** Each researched node raises its branch's cards' weight by 15%: Barbed Wire and Oil
-  Bomb reach ×1.45 with a full branch, each of the five ammo cards ×1.30 (`TECH_AMMO_CARDS`, wider
-  than `AMMO_CARDS`, the exclusive Incendiary/Shock slot); the wall has no card. All the extra weight
+  Bomb reach ×1.45 with a full branch, each of the six ammo cards ×1.30 (`TECH_AMMO_CARDS`, wider
+  than `AMMO_CARDS`, the exclusive Incendiary/Shock/Toxin slot; Toxin Rounds joined in ID-285); the wall has no card. All the extra weight
   together is capped at +25% of the eligible pool's size (`offerWeights`), every extra scaled down
   alike, so the cap binds below about 9.6 cards. The rarity roll is unchanged; inside the rolled
   rarity one draw picks by weight, the very `pick` with all weights 1, so an unresearched game draws
@@ -4261,7 +4266,7 @@ is unrelated: this feature is `tech` in the code.)
 Research unlocks the two slot cards' families as a **starting pick** and gives each card an upgrade
 chain; Hand-loads gets a new effect. Unresearched games stay byte for byte what they were.
 
-- **The nodes.** 15 new nodes, appended to `TECH_IDS` in this order (save format), five new
+- **The nodes.** 15 new nodes (ID-284; ID-285 appends three more, Toxin's, below), appended to `TECH_IDS` in this order (save format), five new
   branches (one a card), three tiers: **Unlock → Mk II → Mk III**. The unlock's id is its card's id
   (as the Tier 4 nodes); it is **not** in `TECH_CARD`, so the card stays in every fight's pool as
   today. No extra table: an unlock is its card, and the slot is the list the card is in (`AMMO_CARDS`,
@@ -4285,17 +4290,21 @@ chain; Hand-loads gets a new effect. Unresearched games stay byte for byte what 
 | Molotov (`molotov`) | Molotov · 1 | **500** | - | Can be the starting throwable |
 | Molotov Mk II (`molotov-mk2`) | Molotov · 2 | **1,000** | the unlock | Fire damage **+15%** (11.5% a second) |
 | Molotov Mk III (`molotov-mk3`) | Molotov · 3 | **2,500** | Mk II | Fire damage **+30%** (13%) and **+1 s** burn time (5 / 7 / 9 s) |
+| Toxin Rounds (`toxin-rounds`; ID-285) | Toxin · 1 | **500** | - | Can be the starting ammo card |
+| Toxin Mk II (`toxin-rounds-mk2`) | Toxin · 2 | **1,000** | the unlock | Poison **+15%** (2.3 / 3.45 / 4.6% of a Shambler's HP a second) and burst **+15%** (17.25%) |
+| Toxin Mk III (`toxin-rounds-mk3`) | Toxin · 3 | **2,500** | Mk II | Poison **+30%** (2.6 / 3.9 / 5.2%) and burst **+30%** (19.5%), in place of the +15% |
 
-  A rare card's chain costs 4,000, Frag Grenades' (epic) 5,800; all 15 cost **21,800**, so the whole
-  tree is 47,600 (25,800 before). One ammo chain and one throwable chain, what a squad can use at
+  A rare card's chain costs 4,000, Frag Grenades' (epic) 5,800; all 18 cost **25,800**, so the whole
+  tree is 51,600 (47,600 before ID-285, 25,800 before ID-284). One ammo chain and one throwable chain, what a squad can use at
   once, are 8,000 to 9,800: about the Scrap of Tiers 1 to 3 (9,300). An unlock is in reach about
   Horde 31 to 35 at the reference player's income. The numbers are `TECH` and `TECH_FX.mk`; the
   highest Mk counts, never the sum.
-- **Where they show.** A second tab in the Research window, **"Ammo & throwables · n/15"**, next to
-  "Upgrades · n/14" (unchanged). The same chart and detail panel with five rows (the cards' names) and
+- **Where they show.** A second tab in the Research window, **"Ammo & throwables · n/18"**, next to
+  "Upgrades · n/14" (unchanged). The same chart and detail panel with six rows (the cards' names; Toxin is the third) and
   three columns headed **Unlock, Mk II, Mk III**, so each chain is one row read left to right with the
   existing straight green/grey lines. No fourth column: at 3 columns the chart needs no sideways scroll
-  on a phone, and 5 rows is one more than the Upgrades tab has, inside the panel's own scroll. A node's
+  on a phone, and 6 rows (5 before ID-285) is two more than the Upgrades tab has, inside the panel's own scroll
+  (on the phone shell the six rows are 38 px each and the one-line note is hidden, so the whole chart fits the 303 px screen; its content stays in the detail panel). A node's
   face, states, refusals, dot and the buying rules are the Upgrades tab's. **Every confirm on this tab
   repeats the node's effect, the unlocks' too, and Hand-loads' confirm repeats its new effect.** One
   line over the chart says where an unlock is used: "Pick your starting ammo and throwable on the
@@ -4318,7 +4327,7 @@ chain; Hand-loads gets a new effect. Unresearched games stay byte for byte what 
   (`.hud-skill-pick`): a `.hud-kit-pick` group of two buttons, labelled **"Start with: Ammo"** and
   **"Start with: Throwable"**, each showing the picked card's icon and name or "None". A button opens a
   small list (None, then that slot's unlocked cards, each with its Lv 1 effect and Mk) headed by the
-  replace rule in one line: "Picking the other card in a fight replaces this one. Its levels are
+  replace rule in one line: "Picking another card of this slot in a fight replaces this one. Its levels are
   lost." A slot with nothing unlocked shows no button, and with neither the group is hidden, so a
   player who has researched none sees today's screen. Desktop and iPad show icon and text, at least
   44 px tall on iPad; the phone shell shows the icon alone with the same label for a screen reader,
@@ -4341,11 +4350,11 @@ chain; Hand-loads gets a new effect. Unresearched games stay byte for byte what 
   8.5 (54% and 65%); Mk III 4 in 7 and 6 in 9 (57% and **67%**), over a 110 px circle (21% more
   ground), when the throws keep coming. Flashbang's Mk seconds are the **first tuning lever** if the
   probe shows it dominating the other throwables.
-- **Offer weight: none.** The 15 nodes add no offer weight (`TECH_CARDS` lists no card for the new
+- **Offer weight: none.** The 18 nodes add no offer weight (`TECH_CARDS` lists no card for the new
   branches). A starting pick is already held from the first second, so every later offer of it is a
   level-up; more weight would stack a faster Lv 3 on the guaranteed start, and an unlocked card the
   player did not pick would crowd the offers (ID-131). The Ammo branch's own weight (Hand-loads and
-  Armour-piercing, +15% each on the five ammo cards) stays, so a researched fight's offers roll as
+  Armour-piercing, +15% each on the six ammo cards) stays, so a researched fight's offers roll as
   they did.
 - **Hand-loads (ID-284).** Ammo · 1, 400 Scrap, still Armour-piercing's parent; a save that has it
   keeps it. In every fight with it researched, the **first round of each magazine** of a squad gun is
@@ -4378,7 +4387,7 @@ chain; Hand-loads gets a new effect. Unresearched games stay byte for byte what 
     24), pistol 10 +22%, sniper 5 +30%, hand cannon 6 +37%. Extended Mags and overkill cut it. It is
     far more than the old effect and than any other Tier 1 node; the PM accepts the small-magazine
     lead, and the probe below measures it.
-  - *Words.* The node's effect, its confirm, Armour-piercing's effect (it names its five cards itself
+  - *Words.* The node's effect, its confirm, Armour-piercing's effect (it names its six cards itself
     now) and the Help's orange "Damage numbers" line ("a near-max crit, or a hand-load") change;
     `cardPitch` / `effectAt` drop the 10%.
 - **Save v28.** `kit`, written only with a pick; `tech` may hold the 15 new ids. The reader never
@@ -4447,19 +4456,56 @@ chain; Hand-loads gets a new effect. Unresearched games stay byte for byte what 
     unresearched digests are unchanged.
   - `storage/save-kit.test.ts`, `storage/save-tech.test.ts`: a v28 round-trip; a pick whose unlock is
     missing dropped; a Mk without its unlock dropped; a v27 save carrying `kit` refused and one
-    without it loads; `readTech`'s cap at 58; hostile `kit` values read as none (`__proto__` and
+    without it loads; `readTech`'s cap at 64 (twice the 32 nodes); hostile `kit` values read as none (`__proto__` and
     `constructor` keys, an extra key, a number, an array, a long string, a bidi, zero-width or
     look-alike string).
   - `core/refplayer.test.ts` (`refTech` never returns a new id; the pinned schedule unchanged),
     `core/techoffer.test.ts` (the 15 add no weight), `ui/text` (every confirm on the new tab, and
     Hand-loads', contains its effect text; the Help's orange line names the hand-load).
   - `e2e/research-kit.spec.ts` (muted, the save seeded by `addInitScript`) at desktop 16:10, 16:9 and
-    21:9, iPad and phone: the new tab's 5 × 3 chart with no sideways scroll, overlap or cut-off; the
+    21:9, iPad and phone: the new tab's 6 × 3 chart with no sideways scroll, overlap or cut-off; the
     picker in three states (nothing unlocked: hidden; one slot; both); the open list, or the phone's
     sheet, inside the viewport; phone buttons at least 44 px tall and 8 px apart; the start row not
     wrapped under the skill picker.
-- **Next.** Toxin Rounds and Toxin Canister append their own three nodes each, add a row to the tab
-  and an entry to their slot's list; nothing else changes.
+- **Toxin Rounds (ID-285).** The third ammo card, ungated: a rare behaviour card in every fight's pool
+  (`SQUAD_CARDS`, last in `SQUAD_PICKS`'s ammo group), so an unresearched fight's offers shift (every
+  golden digest was re-recorded; with it left out of the pool the old values reproduce exactly), and
+  its three nodes (500 / 1,000 / 2,500) append to `TECH_IDS` (a sixth row on the tab; no save
+  version bump: `readTech` and `readKit` are list-driven, and a v28 save written before it loads
+  unchanged). The numbers are `CARD.toxin` (card table, §8) and `TECH_FX.mk.toxin` / `toxinBurst`
+  (both ×1.15 / ×1.3, the highest Mk counts).
+  - *State.* `Enemy.toxUntil`, `toxDps`, `toxBurst`, absent unless poisoned (the name `poison` is the
+    Hell boss's skill). A hit of the held card on an enemy still standing sets all three from the
+    card's level and Mk at that hit (a restart, never a stack); it lights no Oil Bomb slick and no Tar
+    Moat.
+  - *Tick and boundary.* `toxin(s)` runs after `burn(s)`: every enemy with `toxUntil > s.time` loses
+    `toxDps` × STEP, a steady loss (`burnt`, no white flash). `toxicBursts(s)` runs just before
+    `removeDead` with the **same** check (`poisoned`, which uses the existing `due()`): an enemy at 0 HP
+    with a burst and a poison still running bursts, so the last tick that kills it bursts, and one that
+    dies the step it has run out neither ticks nor bursts.
+  - *The burst.* A snapshot of the dying enemies is taken before any burst lands, so an enemy a burst
+    kills in the same pass does not burst in turn; two poisoned deaths in one step each burst, and an
+    enemy in both takes both. Each burst hits every living enemy within 50 px (inclusive: 50 hit, 51
+    not) for `toxBurst`, no armour, as Frag Grenades does, and poisons it with the dead one's `toxDps`
+    for 4 s and **no burst** (so it never chains; one already poisoned keeps its own burst and the
+    stronger of the two rates). It draws no RNG, adds a `Blast` (`skill: 'toxin'`, radius 50) and
+    its damage is not a poison tick (not added to `burnt`, so its hit flashes white as a Frag's does). Brood
+    spawned by the death this step is not hit.
+  - *Which deaths.* Any cause while poisoned (a bullet, a poison tick, a Frag Grenade, a burn, an
+    Airstrike). A **Swollen's blast on the wall** takes it off the field outside `removeDead`, so it
+    does not burst. A card swap to another ammo card leaves the poison and its burst on the enemies.
+  - *Look.* A cooler, darker green wash on the body (hue about 135°, apart from the acid, the boss's
+    poison and the wall gun's mint) and three rising bubbles (`TOXIN`, `toxinLook` in `ui/render.ts`),
+    drawn on the living and on a dying body; the burst is a green pop (`BlastKind` `'toxic'`:
+    ring, flash, rising puffs). Reduce motion holds the bubbles still. The card icon is a drawn green
+    droplet over the cartridge, like Shock Rounds' bolt (`art-src/manifest.json`, `card-toxin-rounds`).
+  - *Tests.* `core/toxin.test.ts` (the poison per level, restart, armour, no fields without the card, no
+    slick or moat, no synergy; the burst by bullet, poison tick and Frag Grenade, 50 / 51 px, no chain,
+    the same-pass kill, two bursts, the boundary, the Swollen blast, a swap; Mk II / III), plus the
+    kit, card-level, text, save, render, Research window and `e2e/research-kit.spec.ts` (the 6 × 3 chart,
+    the picker, and Toxin Rounds as a level-up offer card at every size) checks above.
+- **Next.** Toxin Canister appends its own three nodes, adds a row to the tab and an entry to the
+  throwable slot's list; nothing else changes.
 
 ### Balance pass *(ID-102)*
 

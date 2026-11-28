@@ -1,14 +1,16 @@
 /// <reference types="node" />
-// ID-284: the Research Center's Ammo & throwables tab and the squad screen's starting pick. The tab
-// is a 5 x 3 chart (the five cards by Unlock, Mk II, Mk III) with no sideways scroll, nothing
+// ID-284, ID-285: the Research Center's Ammo & throwables tab and the squad screen's starting pick.
+// The tab is a 6 x 3 chart (the six cards by Unlock, Mk II, Mk III) with no sideways scroll, nothing
 // overlapping or cut off; the picker has three states (nothing unlocked: hidden; one slot; both),
 // its list (a sheet on the phone) stays inside the window, phone buttons are at least 44 px tall and
 // 8 px apart, and the start row is not pushed under the skill picker. Measured in real Chromium on
 // the built game, muted, from a seeded save, at desktop 16:10, 16:9, 21:9, iPad and phone sizes.
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { recruit } from '../src/core/camp.ts';
-import type { TechId } from '../src/core/data.ts';
+import { STEP, type TechId } from '../src/core/data.ts';
 import { newGame, type GameState } from '../src/core/game.ts';
+import { tick, type UpgradeId } from '../src/core/horde.ts';
+import { startSquadHorde } from '../src/core/hordeonly.ts';
 import { decodeSave, encodeSave } from '../src/storage/save.ts';
 import { fmt, inside, intersect, openIntro, rectOf, type Box } from './helpers.ts';
 
@@ -46,7 +48,14 @@ const THROW_ONLY = camp(['frag-grenades', 'flashbang', 'molotov', 'molotov-mk2']
   throwable: 'molotov',
 });
 const BOTH = camp(
-  ['incendiary-rounds', 'incendiary-rounds-mk2', 'shock-rounds', 'frag-grenades', 'flashbang'],
+  [
+    'incendiary-rounds',
+    'incendiary-rounds-mk2',
+    'shock-rounds',
+    'frag-grenades',
+    'flashbang',
+    'toxin-rounds',
+  ],
   { ammo: 'incendiary-rounds', throwable: 'flashbang' },
 );
 
@@ -87,8 +96,17 @@ test('the seeded camps are valid saves', () => {
   }
 });
 
-/** The new tab's chart: 5 rows by 3 columns, whole, with no sideways scroll or overlap. */
-async function chartLaidOut(page: Page, width: number, height: number): Promise<void> {
+/**
+ * The new tab's chart: 6 rows by 3 columns, whole, with no sideways scroll or overlap. On the phone
+ * shell (ID-285) the one-line note is hidden and the rows are 38 px to fit the 303 px screen; on
+ * desktop and iPad it shows.
+ */
+async function chartLaidOut(
+  page: Page,
+  width: number,
+  height: number,
+  phone = false,
+): Promise<void> {
   await page.locator('.research-button').click();
   await page.locator('#camp-tab-kit').click();
   await expect(page.locator('#camp-panel-kit')).toBeVisible();
@@ -97,16 +115,42 @@ async function chartLaidOut(page: Page, width: number, height: number): Promise<
   await expect(page.locator('#camp-panel-upgrades .research-node').first()).toBeHidden();
   expect(await boxes(page, '#camp-panel-upgrades .research-node')).toEqual([]);
   const nodes = await boxes(page, '#camp-panel-kit .research-node');
-  expect(nodes, 'fifteen nodes').toHaveLength(15);
+  expect(nodes, 'eighteen nodes').toHaveLength(18);
   const rows = new Set(nodes.map((n) => Math.round(n.y)));
   const cols = new Set(nodes.map((n) => Math.round(n.x)));
-  expect([rows.size, cols.size], 'five rows, three columns').toEqual([5, 3]);
+  expect([rows.size, cols.size], 'six rows, three columns').toEqual([6, 3]);
+  expect(await page.locator('#camp-panel-kit .research-branch').allTextContents()).toEqual([
+    'Incendiary',
+    'Shock',
+    'Toxin',
+    'Frag',
+    'Flashbang',
+    'Molotov',
+  ]);
   // The headings, and the note over the chart.
   const heads = await page.locator('#camp-panel-kit .research-tier').allTextContents();
   expect(heads).toEqual(['Unlock', 'Mk II', 'Mk III']);
-  await expect(page.locator('#camp-panel-kit .research-kit-note')).toHaveText(
-    'Pick your starting ammo and throwable on the squad screen.',
-  );
+  const note = page.locator('#camp-panel-kit .research-kit-note');
+  if (phone) {
+    await expect(note, 'the note is hidden on the phone shell').toBeHidden();
+    // 38 px rows (six 40 px rows ran 9 px off the 303 px screen), the whole chart on it.
+    const ys = [...rows].sort((a, b) => a - b);
+    for (let i = 1; i < ys.length; i++) expect(ys[i]! - ys[i - 1]!).toBeCloseTo(38, 0);
+    // Touch spacing: two nodes of a column stay at least 8 px apart.
+    const col = nodes
+      .filter((n) => Math.round(n.x) === Math.min(...cols))
+      .sort((a, b) => a.y - b.y);
+    for (let i = 1; i < col.length; i++) {
+      expect(
+        col[i]!.y - (col[i - 1]!.y + col[i - 1]!.h),
+        'gap between nodes',
+      ).toBeGreaterThanOrEqual(7.5);
+    }
+    const chartBox = await boxOf(page.locator('#camp-panel-kit .research-chart'));
+    expect(chartBox.y + chartBox.h, 'chart bottom on screen').toBeLessThanOrEqual(height + 0.5);
+  } else {
+    await expect(note).toHaveText('Pick your starting ammo and throwable on the squad screen.');
+  }
   // No sideways scroll: the chart fits its scroller.
   const [sw, cw] = await page
     .locator('#camp-panel-kit .research-scroll')
@@ -141,6 +185,11 @@ async function chartLaidOut(page: Page, width: number, height: number): Promise<
   // Reading a node: its effect shows in the detail panel.
   await page.locator('#camp-panel-kit [data-id="flashbang-mk3"]').click();
   await expect(page.locator('#camp-panel-kit .research-effect')).toContainText('110 px');
+  // What the hidden note says stays reachable: the unlock's detail names the starting pick.
+  await page.locator('#camp-panel-kit [data-id="toxin-rounds"]').click();
+  await expect(page.locator('#camp-panel-kit .research-effect')).toContainText(
+    'Can be the squad’s starting ammo card.',
+  );
   // The detail panel and its Research button are reachable (the body scrolls), as on the Upgrades tab.
   for (const tab of ['kit', 'upgrades']) {
     await page.locator(`#camp-tab-${tab}`).click();
@@ -161,11 +210,11 @@ async function chartLaidOut(page: Page, width: number, height: number): Promise<
   await page.locator('#camp-tab-kit').click();
   // The first tab still counts its 14, and the two are tabs side by side.
   await expect(page.locator('#camp-tab-upgrades')).toHaveText('Upgrades · 0/14');
-  await expect(page.locator('#camp-tab-kit')).toHaveText('Ammo & throwables · 0/15');
+  await expect(page.locator('#camp-tab-kit')).toHaveText('Ammo & throwables · 0/18');
 }
 
 for (const [name, width, height] of SHAPES) {
-  test(`Research: the Ammo & throwables chart is 5 x 3 and whole: ${name} (${width}x${height})`, async ({
+  test(`Research: the Ammo & throwables chart is 6 x 3 and whole: ${name} (${width}x${height})`, async ({
     page,
   }) => {
     await open(page, NONE, width, height);
@@ -174,7 +223,7 @@ for (const [name, width, height] of SHAPES) {
 }
 
 const THROWS = ['frag-grenades', 'flashbang', 'molotov'];
-const AMMO = ['incendiary-rounds', 'shock-rounds'];
+const AMMO = ['incendiary-rounds', 'shock-rounds', 'toxin-rounds'];
 
 /** The picker's buttons, the start row and the list on one squad screen. */
 async function pickerLaidOut(
@@ -258,7 +307,7 @@ async function pickerLaidOut(
   const screen = { x: 0, y: 0, w: viewport.width, h: viewport.height };
   expect(inside(lb, screen), `list ${fmt(lb)}`).toBe(true);
   await expect(list.locator('.hud-kit-rule')).toHaveText(
-    'Picking the other card in a fight replaces this one. Its levels are lost.',
+    'Picking another card of this slot in a fight replaces this one. Its levels are lost.',
   );
   const unlocked = (game.tech ?? []).filter((t) =>
     (slots[0] === 'ammo' ? AMMO : THROWS).includes(t),
@@ -306,11 +355,11 @@ for (const [name, width, height] of SHAPES) {
 test.describe('phone shell', () => {
   test.use({ hasTouch: true, isMobile: true });
   for (const [name, width, height] of PHONES) {
-    test(`Research: the Ammo & throwables chart is 5 x 3 and whole: ${name} (${width}x${height})`, async ({
+    test(`Research: the Ammo & throwables chart is 6 x 3 and whole: ${name} (${width}x${height})`, async ({
       page,
     }) => {
       await open(page, NONE, width, height);
-      await chartLaidOut(page, width, height);
+      await chartLaidOut(page, width, height, true);
       // The two Research tabs are pills on the sheet: 44 px tall, 8 px apart.
       const pills = await boxes(page, '.camp-head .camp-tab');
       expect(pills).toHaveLength(2);
@@ -325,5 +374,111 @@ test.describe('phone shell', () => {
         await pickerLaidOut(page, game, slots, true);
       });
     }
+  }
+});
+
+/**
+ * The first level-up offer of the fight the browser will start when the clock is fixed at `seed`
+ * (the app seeds a fight from Date.now), played in the core with nobody touching the game.
+ */
+function firstOffer(game: GameState, seed: number): UpgradeId[] {
+  let s = startSquadHorde(game, seed, seed, game.hordeNumber);
+  for (let i = 0; i < Math.round(240 / STEP) && s.offer === null; i++) s = tick(s, STEP);
+  return (s.offer ?? []).flatMap((c) => (c.kind === 'upgrade' ? [c.id] : []));
+}
+const seeds = new Map<GameState, number>();
+/** The first fixed time from NOW whose first offer holds Toxin Rounds (the core is deterministic); found once per camp. */
+function toxinSeed(game: GameState): number {
+  const known = seeds.get(game);
+  if (known !== undefined) return known;
+  const loaded = decodeSave(encodeSave(game, NOW))!.game;
+  for (let seed = NOW; seed < NOW + 500; seed++) {
+    if (firstOffer(loaded, seed).includes('toxin-rounds')) {
+      seeds.set(game, seed);
+      return seed;
+    }
+  }
+  throw new Error('no seed in 500 offers Toxin Rounds');
+}
+
+/** Toxin Rounds shown as a level-up offer card: whole, inside the window and the screen, clear of its neighbours. */
+async function offerLaidOut(
+  page: Page,
+  width: number,
+  height: number,
+  phone: boolean,
+): Promise<void> {
+  await page.clock.setFixedTime(toxinSeed(NONE));
+  await open(page, NONE, width, height);
+  await page.getByRole('button', { name: /^Start Normal 3$/ }).click();
+  // 5x (key D), muted already: the first level-up comes quickly.
+  await page.keyboard.press('d');
+  const icon = page.locator('.hud-cards img.hud-card-icon[data-card="toxin-rounds"]');
+  await expect(icon).toBeVisible({ timeout: 120_000 });
+  const panel = await rectOf(page, '.hud-cards');
+  const screen = { x: 0, y: 0, w: width, h: height };
+  expect(inside(panel, screen), `offer ${fmt(panel)} on screen`).toBe(true);
+  if (phone) expect(panel.h, 'the offer stays 200 px tall or less').toBeLessThanOrEqual(200);
+  const cards = await boxes(page, '.hud-cards .hud-card');
+  expect(cards.length).toBeGreaterThanOrEqual(2);
+  for (const c of cards)
+    expect(inside(c, panel), `card ${fmt(c)} in the offer ${fmt(panel)}`).toBe(true);
+  for (let i = 0; i < cards.length; i++) {
+    for (let j = i + 1; j < cards.length; j++) {
+      expect(area(cards[i]!, cards[j]!), `card ${i} x card ${j}`).toBe(0);
+    }
+  }
+  // The Toxin card: its icon loaded, its name and effect in words, nothing cut off or spilling out.
+  const toxin = page.locator('.hud-cards .hud-card').filter({
+    has: page.locator('img.hud-card-icon[data-card="toxin-rounds"]'),
+  });
+  expect(
+    await icon.evaluate((e) => (e as HTMLImageElement).naturalWidth),
+    'icon loaded',
+  ).toBeGreaterThan(0);
+  await expect(toxin.locator('.hud-card-title')).toHaveText('Toxin Rounds');
+  await expect(toxin).toContainText('poison');
+  const spill = await toxin.evaluate((card) => {
+    const r = card.getBoundingClientRect();
+    return [card, ...card.querySelectorAll<HTMLElement>('*')]
+      .filter((k) => {
+        const kr = k.getBoundingClientRect();
+        return (
+          kr.width > 0 &&
+          (k.scrollWidth > k.clientWidth + 1 ||
+            k.scrollHeight > k.clientHeight + 1 ||
+            kr.right > r.right + 1 ||
+            kr.bottom > r.bottom + 1)
+        );
+      })
+      .map((k) => k.className);
+  });
+  expect(spill, 'parts of the Toxin card cut off or spilling out').toEqual([]);
+  // Every card is one size (ID-195): the Toxin card is as tall and wide as its neighbours.
+  const mine = await boxOf(toxin);
+  for (const c of cards) {
+    expect(Math.abs(c.w - mine.w), 'same width').toBeLessThanOrEqual(1);
+    expect(Math.abs(c.h - mine.h), 'same height').toBeLessThanOrEqual(1);
+  }
+}
+
+for (const [name, width, height] of SHAPES) {
+  test(`Level-up offer: Toxin Rounds is a whole card: ${name} (${width}x${height})`, async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+    await offerLaidOut(page, width, height, false);
+  });
+}
+
+test.describe('phone shell: the level-up offer', () => {
+  test.use({ hasTouch: true, isMobile: true });
+  for (const [name, width, height] of PHONES) {
+    test(`Level-up offer: Toxin Rounds is a whole card: ${name} (${width}x${height})`, async ({
+      page,
+    }) => {
+      test.setTimeout(180_000);
+      await offerLaidOut(page, width, height, true);
+    });
   }
 });

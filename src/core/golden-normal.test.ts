@@ -43,20 +43,23 @@ const CASES: [number, number][] = [
  * the balance cache is keyed on Node's version too), so CI's Node 22 has its own entries below.
  */
 const GOLDEN: Record<string, string> = {
-  'h1-L1-won': 'e0c6024f:11933',
-  'h10-L9-won': '50373c4b:19851',
-  'h20-L18-lost': 'e63921e3:43600',
-  'h20-L40-won': '698999ae:19895',
-  'h30-L27-lost': 'bfe0aa67:48782',
-  'h30-L70-won': 'afdacadd:20022',
-  'h4-L4-won': 'b77247a3:16984',
-  'h45-L40-lost': 'b1959e1b:63415',
-  'h5-L5-won': 'de03c7d9:18576',
-  'h50-L150-won': '89833561:20088',
-  'h50-L45-lost': '81e860dc:42564',
+  'h1-L1-won': '4ee18ea1:11963',
+  'h10-L9-won': 'ef1621d1:19861',
+  'h20-L18-lost': 'a0b25325:40770',
+  'h20-L40-won': 'dc332c3b:19974',
+  'h30-L27-lost': 'b3a5ad9a:52048',
+  'h30-L70-won': 'a3ae8f65:20098',
+  'h4-L4-won': '5d28da43:17014',
+  'h45-L40-lost': '78f81250:73246',
+  'h5-L5-won': '1cfda751:18606',
+  'h50-L150-won': 'd8b5f0b9:20162',
+  'h50-L45-lost': 'c25f1204:41775',
+  // ID-285: every entry re-recorded locally (Node 25): Toxin Rounds joins every fight's offer pool, so the
+  // offers (and the RNG) shift; with it left out of the pool the ID-287 values below reproduce exactly
+  // (e0c6024f:11933 for h1, a0092725:13581 for the replay).
   // ID-287: every entry but h1 re-recorded locally (Node 25): non-fighting jobs reload slower.
   // CI (Node 22) confirms them; where it differs there, its value goes in NODE_22.
-  'replay-won': 'a0092725:13581',
+  'replay-won': '4ce48d19:13596',
 };
 
 /**
@@ -64,9 +67,8 @@ const GOLDEN: Record<string, string> = {
  * (re-taken in ID-236), the same code path that matches main above byte for byte on Node 25.
  */
 const NODE_22: Record<string, string> = {
-  // ID-287: taken from the branch on CI after the re-record.
-  'h20-L18-lost': '6a4c509b:43605',
-  'h20-L40-won': '7bdc1b5e:19899',
+  // ID-285: the two ID-287 entries (6a4c509b:43605, 7bdc1b5e:19899) are stale after the offer reshuffle;
+  // to be taken from the branch on CI.
 };
 
 /** Node's major version: picks the digests recorded on that runtime. */

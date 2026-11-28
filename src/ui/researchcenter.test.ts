@@ -462,30 +462,30 @@ describe('the Ammo & throwables tab (ID-284)', () => {
   };
 
   it('is a second tab with its own count; the Upgrades tab still counts its 14', () => {
-    expect(tabLabel('kit', 2, 15)).toBe('Ammo & throwables · 2/15');
+    expect(tabLabel('kit', 2, 18)).toBe('Ammo & throwables · 2/18');
     expect(tabNodes('upgrades')).toHaveLength(14);
-    expect(tabNodes('kit')).toHaveLength(15);
+    expect(tabNodes('kit')).toHaveLength(18);
     const { rc, st } = mount(game(0));
     rc.open();
     const tabs = [...document.querySelectorAll('.camp-tab')].map((t) => t.textContent);
-    expect(tabs).toEqual(['Upgrades · 0/14', 'Ammo & throwables · 0/15']);
+    expect(tabs).toEqual(['Upgrades · 0/14', 'Ammo & throwables · 0/18']);
     st.game = game(0, ['razor-wire', 'incendiary-rounds', 'incendiary-rounds-mk2', 'molotov']);
     rc.refresh();
     expect([...document.querySelectorAll('.camp-tab')].map((t) => t.textContent)).toEqual([
       'Upgrades · 1/14',
-      'Ammo & throwables · 3/15',
+      'Ammo & throwables · 3/18',
     ]);
   });
 
-  it('draws 15 nodes in 5 rows (the cards) and 3 columns headed Unlock, Mk II, Mk III', () => {
+  it('draws 18 nodes in 6 rows (the cards) and 3 columns headed Unlock, Mk II, Mk III', () => {
     openKit(game(900));
     const nodes = [...document.querySelectorAll<HTMLElement>('#camp-panel-kit .research-node')];
-    expect(nodes.map((n) => n.dataset.id)).toHaveLength(15);
+    expect(nodes.map((n) => n.dataset.id)).toHaveLength(18);
     const rows = new Map<string, string[]>();
     for (const n of nodes) {
       rows.set(n.style.gridRow, [...(rows.get(n.style.gridRow) ?? []), n.style.gridColumn]);
     }
-    expect([...rows.keys()]).toEqual(['2', '3', '4', '5', '6']);
+    expect([...rows.keys()]).toEqual(['2', '3', '4', '5', '6', '7']);
     for (const cols of rows.values()) expect(cols).toEqual(['2', '3', '4']);
     const heads = [...document.querySelectorAll('#camp-panel-kit .research-tier')].map(
       (h) => h.textContent,
@@ -494,7 +494,11 @@ describe('the Ammo & throwables tab (ID-284)', () => {
     const rowNames = [...document.querySelectorAll('#camp-panel-kit .research-branch')].map(
       (h) => h.textContent,
     );
-    expect(rowNames).toEqual(['Incendiary', 'Shock', 'Frag', 'Flashbang', 'Molotov']);
+    expect(rowNames).toEqual(['Incendiary', 'Shock', 'Toxin', 'Frag', 'Flashbang', 'Molotov']);
+    expect(
+      document.querySelector('#camp-panel-kit [data-id="toxin-rounds"] .research-node-name')!
+        .textContent,
+    ).toBe('Toxin Rounds');
     // The unlock is the card's name, the chain's others its Mk.
     expect(
       document.querySelector('#camp-panel-kit [data-id="frag-grenades"] .research-node-name')!
@@ -513,12 +517,12 @@ describe('the Ammo & throwables tab (ID-284)', () => {
     );
   });
 
-  it('draws one line per prerequisite of its own nodes, in a 3 by 5 box', () => {
+  it('draws one line per prerequisite of its own nodes, in a 3 by 6 box', () => {
     openKit(game(900, ['incendiary-rounds']));
     const svg = document.querySelector('#camp-panel-kit .research-lines')!;
-    expect(svg.getAttribute('viewBox')).toBe('0 0 3 5');
+    expect(svg.getAttribute('viewBox')).toBe('0 0 3 6');
     const lines = [...svg.querySelectorAll<SVGElement>('[data-from]')];
-    expect(lines).toHaveLength(10);
+    expect(lines).toHaveLength(12);
     for (const l of lines) {
       expect(l.tagName).toBe('line');
       expect(l.dataset.done, `${l.dataset.from}`).toBe(
@@ -549,7 +553,7 @@ describe('the Ammo & throwables tab (ID-284)', () => {
       expect(researchQuestion(id, TECH[id].cost, 99999), id).toContain(TECH_EFFECT[id]);
       expect(TECH_EFFECT[id], id).not.toBe('');
     }
-    expect(TECH_TABS.kit).toHaveLength(5);
+    expect(TECH_TABS.kit).toHaveLength(6);
   });
 
   it('an unlock reads the same in the confirm, Mk II and Mk III with their numbers', () => {
@@ -561,6 +565,15 @@ describe('the Ammo & throwables tab (ID-284)', () => {
     expect(researchQuestion('flashbang-mk3', 2500, 4000)).toContain('110 px');
     expect(researchQuestion('molotov-mk3', 2500, 4000)).toContain('5 / 7 / 9 s');
     expect(researchQuestion('shock-rounds-mk2', 1000, 4000)).toContain('0.23 / 0.345 / 0.46 s');
+    expect(researchQuestion('toxin-rounds', 500, 2000)).toBe(
+      'Research Toxin Rounds for 500 Scrap? Can be the squad’s starting ammo card. You have 2,000.',
+    );
+    expect(researchQuestion('toxin-rounds-mk2', 1000, 4000)).toContain(
+      '2.3 / 3.45 / 4.6% of a Shambler’s HP a second) and burst +15% (17.25%)',
+    );
+    expect(researchQuestion('toxin-rounds-mk3', 2500, 4000)).toContain(
+      '2.6 / 3.9 / 5.2%) and burst +30% (19.5%), in place of the +15%',
+    );
     expect(researchQuestion('incendiary-rounds-mk2', 1000, 4000)).toContain('3.45 / 6.9 / 10.35%');
   });
 

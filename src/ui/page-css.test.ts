@@ -1715,28 +1715,33 @@ describe('the phone sheets (ID-276)', () => {
     expect(name).toMatch(/word-break: normal;/);
   });
 
-  it('Ammo & throwables (ID-284): five 40 px rows of one-line nodes fit under the header at 303 px', () => {
+  it('Ammo & throwables (ID-284, ID-285): six 38 px rows of one-line nodes fit under the header at 303 px, the note hidden', () => {
     const chart = rule(".camp-scrim .research-chart[data-tab='kit']");
     expect(chart).toMatch(/grid-template-columns: 48px repeat\(3, minmax\(0, 1fr\)\);/);
-    const rows = /grid-template-rows: auto repeat\(5, (\d+)px\);/.exec(chart);
+    const rows = /grid-template-rows: auto repeat\(6, (\d+)px\);/.exec(chart);
     const row = +rows![1]!;
-    expect(row).toBe(40);
-    // 28 header + 8 gap + 1 border, 4 + 4 body padding, the 15 px note and 2 clear, 18 tier header, five rows.
-    expect(28 + 8 + 1 + 4 + 4 + 15 + 2 + 18 + 5 * row).toBeLessThanOrEqual(303);
-    // One 13 px name over one 13 px face line, 2 + 2 padding, 2 border; 4 px clear above and below.
-    expect(13 + 13 + 2 + 2 + 2).toBeLessThanOrEqual(row - 8);
+    expect(row).toBe(38);
+    // Measured at 862 x 303: the chart starts 56 px down and its tier row is 16 px; six rows: no room for the note.
+    expect(56 + 16 + 6 * row).toBeLessThanOrEqual(303);
+    const node = rule(".camp-scrim .research-chart[data-tab='kit'] .research-node");
+    expect(node).toMatch(/margin: 4px var\(--space-8\);/);
+    expect(node).toMatch(/padding-block: 1px;/);
+    expect(rule('.camp-scrim .research-kit-note')).toMatch(/display: none;/);
+    // One 13 px name over one 13 px face line, 1 + 1 padding, 2 border; 4 px clear above and below,
+    // so two nodes stay 8 px apart (the phone's touch spacing).
+    expect(13 + 13 + 1 + 1 + 2).toBeLessThanOrEqual(row - 8);
     // The two Research pills are wide enough for two lines of 11 px, not an ellipsis.
     const pill = rule(
       ".camp-scrim .camp-dialog[data-tab='upgrades'] .camp-tabs .camp-tab,\n  .camp-scrim .camp-dialog[data-tab='kit'] .camp-tabs .camp-tab",
     );
     expect(pill).toMatch(/width: 112px;/);
     expect(pill).toMatch(/white-space: normal;/);
-    // The desktop chart: three columns, five rows, the line layer across all of them.
+    // The desktop chart: three columns, six rows, the line layer across all of them.
     expect(rules).toMatch(
-      /\.research-chart\[data-tab='kit'\] \{[^}]*grid-template-columns: 72px repeat\(3, minmax\(124px, 1fr\)\);[^}]*grid-template-rows: auto repeat\(5, 72px\);/,
+      /\.research-chart\[data-tab='kit'\] \{[^}]*grid-template-columns: 72px repeat\(3, minmax\(124px, 1fr\)\);[^}]*grid-template-rows: auto repeat\(6, 72px\);/,
     );
     expect(rules).toMatch(
-      /\.research-chart\[data-tab='kit'\] \.research-lines \{\s*grid-area: 2 \/ 2 \/ 7 \/ 5;/,
+      /\.research-chart\[data-tab='kit'\] \.research-lines \{\s*grid-area: 2 \/ 2 \/ 8 \/ 5;/,
     );
   });
 

@@ -221,6 +221,7 @@ describe('the squad in a horde (ID-066)', () => {
       'extended-mags',
       'concussion-rounds',
       'shock-rounds',
+      'toxin-rounds',
       'incendiary-rounds',
       'frag-grenades',
       'barbed-wire',

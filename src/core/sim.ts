@@ -235,6 +235,7 @@ const SQUAD_PICKS: readonly UpgradeId[] = [
   'extended-mags',
   'incendiary-rounds',
   'shock-rounds',
+  'toxin-rounds',
   // The mode cards (ID-222) show only when their boss skill is in the fight (Suppressing Fire,
   // Cauterise, Momentum and Adrenaline in every fight, ID-235, ID-245), so they rank above
   // the utility picks but under the damage core.

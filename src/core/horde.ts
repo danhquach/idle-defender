@@ -139,6 +139,7 @@ export type UpgradeId =
   | 'flashbang'
   | 'molotov'
   | 'shock-rounds'
+  | 'toxin-rounds'
   | 'barbed-wire'
   | 'aim-for-the-head'
   | 'hollow-point-rounds'
@@ -272,6 +273,14 @@ export interface Enemy {
   burnUntil?: number;
   /** Incendiary Rounds: what its burn deals a second, set by the hit that lit it (ID-097). */
   burnDps?: number;
+  /**
+   * Toxin Rounds (ID-285): fight time its poison runs until, what it deals a second and what it
+   * bursts for if it dies poisoned, all set by the hit that poisoned it; absent = never poisoned.
+   * A poison a burst spread has no `toxBurst`, so a burst never chains.
+   */
+  toxUntil?: number;
+  toxDps?: number;
+  toxBurst?: number;
   /** A flashbang (ID-107): fight time its daze ends, for the view's stars; absent = never. */
   dazedUntil?: number;
   /** Shock Net (ID-264): fight time its latest net stun ends; absent = never netted. */
@@ -725,11 +734,11 @@ export interface Moat {
 }
 /** A bomb or flashbang going off at `(x, y)`, drawn for `SKILL_FLASH` seconds. */
 export interface Blast {
-  skill: 'airstrike' | 'flashbang';
+  skill: 'airstrike' | 'flashbang' | 'toxin';
   x: number;
   y: number;
   at: number;
-  /** A Flashbang's reach in px when its Mk widened it (ID-284); absent = `CARD.flashbang.radius`. */
+  /** A Flashbang's reach in px when its Mk widened it (ID-284), a Toxin burst's (ID-285); absent = `CARD.flashbang.radius`. */
   radius?: number;
 }
 /** Multipliers from upgrade cards; all start at 1. */
@@ -1278,9 +1287,9 @@ export const wallTechShare = (tech: readonly TechId[]): number =>
     ),
   );
 
-/** The five cards the Research Center upgrades Mk II and Mk III (ID-284). */
+/** The six cards the Research Center upgrades Mk II and Mk III (ID-284). */
 export type MkCard =
-  'incendiary-rounds' | 'shock-rounds' | 'frag-grenades' | 'flashbang' | 'molotov';
+  'incendiary-rounds' | 'shock-rounds' | 'toxin-rounds' | 'frag-grenades' | 'flashbang' | 'molotov';
 
 /**
  * Card `card`'s Mk this fight (ID-284): 0 (none), 1 (Mk II) or 2 (Mk III), the highest researched
@@ -1495,6 +1504,7 @@ function step(s: HordeState, rng: Rng): void {
   blowFrags(s);
   landTar(s);
   burn(s);
+  toxin(s);
   moatTick(s);
   bleed(s);
   spikes(s);
@@ -1508,6 +1518,7 @@ function step(s: HordeState, rng: Rng): void {
   treat(s);
   repairTurrets(s);
   springTraps(s);
+  toxicBursts(s);
   removeDead(s);
   mutate(s, rng);
   shieldAura(s);
@@ -1664,6 +1675,9 @@ function place(s: HordeState, kind: EnemyKind, x: number, y: number): Enemy {
     roarUntil: undefined,
     burnUntil: undefined,
     burnDps: undefined,
+    toxUntil: undefined,
+    toxDps: undefined,
+    toxBurst: undefined,
     dazedUntil: undefined,
     shockUntil: undefined,
     pushedAt: undefined,
@@ -2547,6 +2561,13 @@ function cardHit(
     if (strip && inStrip(strip, e)) lightMoat(s);
   }
   if (took(s, 'shock-rounds')) shock(s, e);
+  // Toxin Rounds (ID-285): a hit on an enemy still standing restarts its poison at the card's
+  // numbers now; it never stacks. No slick or moat lights (the poison is not fire).
+  if (took(s, 'toxin-rounds') && e.hp > 0) {
+    e.toxUntil = s.time + CARD.toxin.seconds;
+    e.toxDps = toxDpsOf(s);
+    e.toxBurst = toxBurstOf(s);
+  }
   if (took(s, 'concussion-rounds')) knockBack(s, e, dealt);
   // Suppressing Fire (ID-235): a hit doesn't extend the fire, and once it ends the enemy
   // can't be put under fire again for `CARD.suppress.cooldown` s, so steady fire can't hold it.
@@ -3496,6 +3517,62 @@ export const burnDpsOf = (
     TECH_FX.mk.burn,
     atLevel(s, 'incendiary-rounds', CARD.burn.share),
   ) * shamblerHp(s);
+
+/** A Toxin Rounds poison's damage a second at the card's level (ID-285): its share of this wave's Shambler HP. */
+export const toxDpsOf = (
+  s: Parameters<typeof cardLevel>[0] &
+    Pick<HordeState, 'hordeNumber' | 'wave' | 'hpScale' | 'tech'>,
+): number =>
+  mkTimes(s, 'toxin-rounds', TECH_FX.mk.toxin, atLevel(s, 'toxin-rounds', CARD.toxin.share)) *
+  shamblerHp(s);
+
+/** What an enemy poisoned by Toxin Rounds bursts for when it dies (ID-285): `CARD.toxin.burst` of this wave's Shambler HP. */
+export const toxBurstOf = (
+  s: Pick<HordeState, 'hordeNumber' | 'wave' | 'hpScale' | 'tech' | 'taken'>,
+): number => mkTimes(s, 'toxin-rounds', TECH_FX.mk.toxinBurst, CARD.toxin.burst) * shamblerHp(s);
+
+/** Whether Toxin Rounds' poison still runs in `e` (ID-285): the same check ticks it and lets it burst. */
+export const poisoned = (s: Pick<HordeState, 'time'>, e: Enemy): boolean =>
+  e.toxUntil !== undefined && !due(s.time, e.toxUntil);
+
+/**
+ * Toxin Rounds (ID-285): every poisoned enemy loses its `toxDps` a second, armour ignored, a
+ * steady loss like a burn's (no white hit flash).
+ */
+function toxin(s: HordeState): void {
+  for (const e of s.enemies) {
+    if (e.hp <= 0 || !poisoned(s, e)) continue;
+    const dmg = taken(s, e, (e.toxDps ?? 0) * STEP);
+    popOn(s, e, dmg);
+    e.hp = Math.max(0, e.hp - dmg);
+    e.burnt = (e.burnt ?? 0) + dmg;
+  }
+}
+
+/**
+ * Toxin Rounds (ID-285): each enemy at 0 HP that was still poisoned and carries a burst (a
+ * snapshot taken before any burst lands, so one a burst kills does not burst in turn) bursts
+ * for its `toxBurst` on every living enemy within `CARD.toxin.radius`, armour ignored, and
+ * poisons them with its own `toxDps` but no burst: it never chains. Runs before `removeDead`,
+ * so a death from any cause counts; a Swollen's blast takes it off the field elsewhere, with no burst.
+ */
+function toxicBursts(s: HordeState): void {
+  const dying = s.enemies.filter((e) => e.hp <= 0 && e.toxBurst !== undefined && poisoned(s, e));
+  for (const d of dying) {
+    s.blasts.push({ skill: 'toxin', x: d.x, y: d.y, at: s.time, radius: CARD.toxin.radius });
+    for (const e of s.enemies) {
+      if (e.hp <= 0 || Math.hypot(e.x - d.x, e.y - d.y) > CARD.toxin.radius + EPS) continue;
+      const dmg = taken(s, e, d.toxBurst!);
+      popOn(s, e, dmg);
+      e.hp = Math.max(0, e.hp - dmg);
+      // The spread poison carries no burst; one already poisoned keeps its own burst and the
+      // stronger of the two rates (a level-up between the hits never lowers it).
+      if (!poisoned(s, e)) e.toxBurst = undefined;
+      e.toxDps = poisoned(s, e) ? Math.max(e.toxDps ?? 0, d.toxDps ?? 0) : d.toxDps;
+      e.toxUntil = s.time + CARD.toxin.seconds;
+    }
+  }
+}
 
 /** A Frag Grenade's burst (ID-124): `CARD.frag.share` of this wave's Shambler HP. */
 export const fragDamage = (

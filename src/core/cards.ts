@@ -268,10 +268,20 @@ export const UPGRADES: Readonly<
     rarity: 'rare',
     levels: 1,
   },
+  // ID-285: the third ammo card; appended last.
+  'toxin-rounds': {
+    category: 'behaviour',
+    rarity: 'rare',
+    levels: CARD_MAX_LEVEL,
+  },
 };
 
 /** The squad's one ammo slot (ID-097): it holds at most one of these. */
-export const AMMO_CARDS: readonly UpgradeId[] = ['incendiary-rounds', 'shock-rounds'];
+export const AMMO_CARDS: readonly UpgradeId[] = [
+  'incendiary-rounds',
+  'shock-rounds',
+  'toxin-rounds',
+];
 /** The squad's one throwable slot (ID-139): it holds at most one of these. */
 export const THROWABLE_CARDS: readonly UpgradeId[] = ['frag-grenades', 'flashbang', 'molotov'];
 const SLOTS = [AMMO_CARDS, THROWABLE_CARDS] as const;
@@ -444,7 +454,7 @@ export function synergyOf(state: HordeState, id: UpgradeId): Synergy | null {
 
 /**
  * The cards the Ammo branch strengthens (ID-263). Wider than `AMMO_CARDS`, the exclusive ammo
- * slot (Incendiary and Shock only): it adds Heavy Rounds, Piercing Rounds and Scavenged Ammo.
+ * slot (Incendiary, Shock and Toxin only): it adds Heavy Rounds, Piercing Rounds and Scavenged Ammo.
  */
 export const TECH_AMMO_CARDS: readonly UpgradeId[] = TECH_FX.ammoCards;
 /** The cards each branch's researched nodes raise the offer weight of (ID-263); the wall has none. */
@@ -456,6 +466,7 @@ export const TECH_CARDS: Readonly<Record<TechBranch, readonly UpgradeId[]>> = {
   // ID-284: the unlock and Mk nodes add no offer weight (a starting pick is held from the start).
   incendiary: [],
   shock: [],
+  toxin: [],
   frag: [],
   flashbang: [],
   molotov: [],

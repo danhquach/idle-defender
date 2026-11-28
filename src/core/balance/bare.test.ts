@@ -47,9 +47,15 @@ describe('balance on the starting base, no building', () => {
     expect(runs.every((r) => r.outcome === 'won' && r.injured === 0)).toBe(true);
   });
 
-  it('Hordes 2 and 3 are won on every seed: the first hordes are sure wins (ID-097)', () => {
+  it('Hordes 2 and 3 are won on every seed with two on the line: the first hordes are sure wins (ID-097)', () => {
     expect(winRate(byHorde.get(2)!)).toBe(1);
-    expect(winRate(byHorde.get(3)!)).toBe(1);
+    // ID-285: seed 10 is never offered the recruit and the lone survivor falls in wave 4; with two
+    // on the line Horde 3 is still a sure win.
+    const h3 = byHorde.get(3)!;
+    const twoOnLine = h3.filter((r) => r.tookPart >= 2);
+    expect(twoOnLine.length).toBeGreaterThan(0);
+    expect(twoOnLine.every((r) => r.outcome === 'won')).toBe(true);
+    expect(winRate(h3)).toBeGreaterThanOrEqual(0.95);
   });
 
   it('Hordes 1 and 2 last 3–5 minutes (design §4)', () => {

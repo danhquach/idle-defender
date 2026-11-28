@@ -47,8 +47,8 @@ interface Played {
   seed: number;
   bare: boolean;
   researched: boolean;
-  /** ID-284: with every node and a kit picked, Incendiary + Frag Grenades, and Shock + Flashbang, at Mk III. */
-  kitted: [boolean, boolean];
+  /** ID-284: with every node and a kit picked, Incendiary + Frag Grenades, Shock + Flashbang, and Toxin + Molotov (ID-285), at Mk III. */
+  kitted: [boolean, boolean, boolean];
 }
 
 describe('a fully researched tree (ID-263)', () => {
@@ -64,8 +64,8 @@ describe('a fully researched tree (ID-263)', () => {
                 seed,
               ).outcome === 'won';
             const kit = (
-              ammo: 'incendiary-rounds' | 'shock-rounds',
-              throwable: 'frag-grenades' | 'flashbang',
+              ammo: 'incendiary-rounds' | 'shock-rounds' | 'toxin-rounds',
+              throwable: 'frag-grenades' | 'flashbang' | 'molotov',
             ): boolean =>
               playSquadHorde(
                 withKit({ ...squadAt(n, level), tech: [...TECH_IDS] }, ammo, throwable, 2),
@@ -77,7 +77,11 @@ describe('a fully researched tree (ID-263)', () => {
               seed,
               bare: won(false),
               researched: won(true),
-              kitted: [kit('incendiary-rounds', 'frag-grenades'), kit('shock-rounds', 'flashbang')],
+              kitted: [
+                kit('incendiary-rounds', 'frag-grenades'),
+                kit('shock-rounds', 'flashbang'),
+                kit('toxin-rounds', 'molotov'),
+              ],
             };
           }),
         );
@@ -104,6 +108,9 @@ describe('a fully researched tree (ID-263)', () => {
         p.kitted[1],
         `Horde ${p.n} (level ${p.level}), seed ${p.seed}, Shock + Flashbang`,
       ).toBe(true);
+      expect(p.kitted[2], `Horde ${p.n} (level ${p.level}), seed ${p.seed}, Toxin + Molotov`).toBe(
+        true,
+      );
     }
   });
 

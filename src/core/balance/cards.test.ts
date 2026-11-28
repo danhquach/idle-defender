@@ -110,6 +110,8 @@ describe('each ID-077 card makes a measurable difference (Horde 4, three survivo
     for (const id of LEVELLED) for (const lv of LEVELS) withCard.set(key(id, lv), play(id, lv));
     for (const id of UNIQUE) withCard.set(key(id, 1), play(id, 1));
     for (const lv of LEVELS) withCard.set(key('shock-rounds', lv), play('shock-rounds', lv));
+    // ID-285: Toxin Rounds, played at each level beside Shock Rounds.
+    for (const lv of LEVELS) withCard.set(key('toxin-rounds', lv), play('toxin-rounds', lv));
     // Hollow Points needs a crit to act on: the fresh squad has none, so Aim for the Head Lv 1.
     for (const lv of LEVELS)
       withCard.set(key('hollow-point-rounds', lv), play('hollow-point-rounds', lv, AIM_1));
@@ -180,6 +182,16 @@ describe('each ID-077 card makes a measurable difference (Horde 4, three survivo
     (lv) => {
       expect(of('shock-rounds', lv).killedAt).toBeGreaterThanOrEqual(none.killedAt + 5);
       expect(of('shock-rounds', lv).wins).toBeGreaterThan(none.wins);
+    },
+  );
+
+  // ID-285: a poison that kills and bursts is a damage card: each level wins more of the same
+  // fights than no card, and kills further out.
+  it.each(LEVELS)(
+    'Toxin Rounds at level %i wins more than no card and kills further out (ID-285)',
+    (lv) => {
+      expect(of('toxin-rounds', lv).wins).toBeGreaterThan(none.wins);
+      expect(of('toxin-rounds', lv).killedAt).toBeGreaterThan(none.killedAt);
     },
   );
 

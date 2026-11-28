@@ -30,6 +30,7 @@ const ROW4 = 4.5 * SEGMENT_HEIGHT;
 const CARDS: MkCard[] = [
   'incendiary-rounds',
   'shock-rounds',
+  'toxin-rounds',
   'frag-grenades',
   'flashbang',
   'molotov',
@@ -360,7 +361,7 @@ describe('a card from an offer and one from the starting pick are the same card 
       const game: GameState = {
         ...squadAt(5, 5),
         tech,
-        kit: CARDS.indexOf(id) < 2 ? { ammo: id } : { throwable: id },
+        kit: CARDS.indexOf(id) < 3 ? { ammo: id } : { throwable: id },
       };
       const fromPick = startSquadHorde(game, 1, 0);
       expect(mkOf(fromPick, id)).toBe(mkOf(fromOffer, id));

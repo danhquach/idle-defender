@@ -13,6 +13,7 @@ import { enemy } from './testing.ts';
 const ALL_UNLOCKS: TechId[] = [
   'incendiary-rounds',
   'shock-rounds',
+  'toxin-rounds',
   'frag-grenades',
   'flashbang',
   'molotov',
@@ -49,6 +50,19 @@ describe('the starting pick holds at Lv 1 (ID-284)', () => {
     const t = fightOf(game(ALL_UNLOCKS, { throwable: 'molotov' }));
     expect(t.taken).toEqual(['molotov']);
     expect(t.cardLevels.molotov).toBe(1);
+  });
+
+  it('Toxin Rounds starts at Lv 1 like the other ammo cards, and refuses without its unlock (ID-285)', () => {
+    const s = fightOf(game(ALL_UNLOCKS, { ammo: 'toxin-rounds' }));
+    expect(s.taken).toEqual(['toxin-rounds']);
+    expect(s.cardLevels['toxin-rounds']).toBe(1);
+    expect(pickKit(game(['incendiary-rounds']), 'ammo', 'toxin-rounds')).toEqual({
+      ok: false,
+      code: 'kit-locked',
+    });
+    expect(pickKit(game(), 'throwable', 'toxin-rounds')).toEqual({ ok: false, code: 'kit-slot' });
+    const swapped = pick(s, 'incendiary-rounds');
+    expect(swapped.taken).toEqual(['incendiary-rounds']);
   });
 
   it('the same card from an offer makes it Lv 2', () => {
@@ -162,7 +176,8 @@ describe('pickKit (ID-284)', () => {
 
   it('kitCards lists the unlocked cards of a slot, in the slot’s order', () => {
     expect(kitCards(game([]), 'ammo')).toEqual([]);
-    expect(kitCards(game(), 'ammo')).toEqual(['incendiary-rounds', 'shock-rounds']);
+    expect(kitCards(game(), 'ammo')).toEqual(['incendiary-rounds', 'shock-rounds', 'toxin-rounds']);
+    expect(kitCards(game(['toxin-rounds']), 'ammo')).toEqual(['toxin-rounds']);
     expect(kitCards(game(), 'throwable')).toEqual(['frag-grenades', 'flashbang', 'molotov']);
     expect(kitCards(game(['molotov']), 'throwable')).toEqual(['molotov']);
     // A Mk alone unlocks nothing.

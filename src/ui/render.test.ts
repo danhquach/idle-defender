@@ -92,6 +92,9 @@ import {
   thrownFall,
   FIREBALL_WIDTH,
   SHOCK,
+  TOXIN,
+  toxHeat,
+  toxinLook,
   twitch,
   bulletShape,
   drawScene,
@@ -5211,6 +5214,29 @@ describe('a burning enemy’s fire (ID-089)', () => {
       expect(flameFills(fills)).toHaveLength(0);
     });
 
+    it('a poisoned enemy gets a green wash and rising bubbles; reduce motion holds them still; none once it has faded (ID-285)', () => {
+      const scene = (time: number, toxUntil?: number): Scene => {
+        const s = blank();
+        s.time = time;
+        enemy(s as unknown as HordeState, { id: 7, ...(toxUntil ? { toxUntil } : {}) });
+        return s;
+      };
+      const count = (s: Scene, reduced = false): number => {
+        const { r, fills } = record();
+        const anim = new Animator();
+        anim.reduced = reduced;
+        drawScene(r.ctx, r.art, s, CAM, VIEW, null, null, null, anim);
+        return fills.length;
+      };
+      const plain = count(scene(1));
+      // The wash (one gradient fill) and up to three bubbles on top of the plain scene.
+      expect(count(scene(1, 3))).toBeGreaterThanOrEqual(plain + 2);
+      expect(count(scene(1, 3))).toBeLessThanOrEqual(plain + 1 + TOXIN.bubbles);
+      // Still under Reduce motion, and gone once its fade (TOXIN.out) is over.
+      expect(count(scene(1, 3), true)).toBeGreaterThanOrEqual(plain + 2);
+      expect(count(scene(3 + TOXIN.out + 0.1, 3))).toBe(plain);
+    });
+
     describe('a shocked enemy (ID-097, art ID-120)', () => {
       const shockScene = (time: number, shockUntil?: number, e: Partial<Enemy> = {}): Scene => {
         const s = blank();
@@ -5885,5 +5911,65 @@ describe('Cauterise and Adrenaline on the canvas (ID-245)', () => {
       VIEW,
     );
     expect(glow(m)).toHaveLength(0);
+  });
+});
+
+describe('a poisoned enemy’s look (ID-285)', () => {
+  const feet = { sx: 400, sy: 300 };
+  const look = (over: Partial<{ id: number; k: number; clock: number; zoom: number }> = {}) =>
+    toxinLook(over.id ?? 3, feet, 34, 30, STILL, over.k ?? 1, over.clock ?? 2, {
+      ...CAM,
+      zoom: over.zoom ?? 1,
+    });
+  const hue = (hex: string): number => {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255) as [
+      number,
+      number,
+      number,
+    ];
+    const max = Math.max(r, g, b);
+    const d = max - Math.min(r, g, b);
+    const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return Math.round(((h * 60 + 360) % 360) * 10) / 10;
+  };
+
+  it('is strong while the poison runs, fades over TOXIN.out after it, and is 0 when never poisoned', () => {
+    expect(toxHeat(5, {})).toBe(0);
+    expect(toxHeat(5, { toxUntil: 0 })).toBe(0);
+    expect(toxHeat(5, { toxUntil: 8 })).toBe(1);
+    expect(toxHeat(8 + TOXIN.out / 2, { toxUntil: 8 })).toBeCloseTo(0.5, 9);
+    expect(toxHeat(8 + TOXIN.out, { toxUntil: 8 })).toBe(0);
+    expect(toxHeat(20, { toxUntil: 8 })).toBe(0);
+  });
+
+  it('is the same on a replay, differs from enemy to enemy, and the bubbles rise over time', () => {
+    expect(look()).toEqual(look());
+    expect(look({ id: 4 })).not.toEqual(look());
+    const [a, b] = [look({ clock: 2 }), look({ clock: 2.1 })];
+    expect(b.bubbles.some((x, i) => x.y !== a.bubbles[i]!.y)).toBe(true);
+    // Held still with Reduce motion (clock 0): the same every frame, still drawn.
+    expect(look({ clock: 0 })).toEqual(look({ clock: 0 }));
+    expect(look({ clock: 0 }).bubbles).toHaveLength(TOXIN.bubbles);
+  });
+
+  it('bubbles stay over the body and fade with the strength', () => {
+    const l = look();
+    for (const b of l.bubbles) {
+      expect(b.r).toBeGreaterThanOrEqual(TOXIN.least);
+      expect(b.alpha).toBeLessThanOrEqual(TOXIN.alpha);
+      expect(Math.abs(b.x - l.x)).toBeLessThanOrEqual(30 * 0.35 + 1e-9);
+    }
+    expect(look({ k: 0.5 }).alpha).toBeCloseTo(l.alpha / 2, 9);
+    expect(look({ k: 0 }).bubbles.every((b) => b.alpha === 0)).toBe(true);
+  });
+
+  it('is a cooler green than the acid, the boss’s poison and the wall gun’s mint (hue 125 to 140)', () => {
+    for (const c of [TOXIN.tint, TOXIN.bubble, BLAST.toxic.ring, BLAST.toxic.flash[1]]) {
+      expect(hue(c), c).toBeGreaterThanOrEqual(125);
+      expect(hue(c), c).toBeLessThanOrEqual(140);
+    }
+    for (const other of [COLOR.acid, BOSS_LOOK.poison, COLOR.wallGunTracer]) {
+      expect(Math.abs(hue(TOXIN.tint) - hue(other)), other).toBeGreaterThanOrEqual(25);
+    }
   });
 });

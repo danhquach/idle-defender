@@ -1472,6 +1472,13 @@ export const CARD = {
    * enemy can't be paralysed again until `immune` s after its last paralysis ends.
    */
   shock: { seconds: [0.2, 0.3, 0.4], heavy: 0.5, immune: 1, heavyKinds: HEAVY_KINDS },
+  /**
+   * Toxin Rounds (ID-285): a hit poisons the enemy for `seconds` (a new hit restarts it, never
+   * stacks): per second, per level, a share of this wave's Shambler HP, armour ignored. An
+   * enemy that dies poisoned bursts for `burst` of the same HP on every living enemy within
+   * `radius` px and poisons them (that poison carries no burst, so it never chains).
+   */
+  toxin: { share: [0.02, 0.03, 0.04], seconds: 4, burst: 0.15, radius: 50 },
   /** Speed Loaders: squad reload time factor, per level. */
   loaders: [0.9, 0.8, 0.7],
   /** Extended Mags: squad magazine size factor, per level. */
@@ -2512,10 +2519,23 @@ export const TECH_IDS = [
   'molotov',
   'molotov-mk2',
   'molotov-mk3',
+  // Toxin Rounds (ID-285): appended last, as the order is save format.
+  'toxin-rounds',
+  'toxin-rounds-mk2',
+  'toxin-rounds-mk3',
 ] as const;
 export type TechId = (typeof TECH_IDS)[number];
 export type TechBranch =
-  'wall' | 'wire' | 'ammo' | 'mortars' | 'incendiary' | 'shock' | 'frag' | 'flashbang' | 'molotov';
+  | 'wall'
+  | 'wire'
+  | 'ammo'
+  | 'mortars'
+  | 'incendiary'
+  | 'shock'
+  | 'toxin'
+  | 'frag'
+  | 'flashbang'
+  | 'molotov';
 /** The chart's rows, top to bottom (their names are `TECH_BRANCH_NAME`, ui/text/names.ts). */
 export const TECH_BRANCHES: readonly TechBranch[] = [
   'wall',
@@ -2524,6 +2544,7 @@ export const TECH_BRANCHES: readonly TechBranch[] = [
   'mortars',
   'incendiary',
   'shock',
+  'toxin',
   'frag',
   'flashbang',
   'molotov',
@@ -2531,7 +2552,7 @@ export const TECH_BRANCHES: readonly TechBranch[] = [
 /** The Research window's tabs (ID-284) and the branches each one's chart shows as rows, in order. */
 export const TECH_TABS = {
   upgrades: ['wall', 'wire', 'ammo', 'mortars'],
-  kit: ['incendiary', 'shock', 'frag', 'flashbang', 'molotov'],
+  kit: ['incendiary', 'shock', 'toxin', 'frag', 'flashbang', 'molotov'],
 } as const satisfies Record<string, readonly TechBranch[]>;
 export type TechTab = keyof typeof TECH_TABS;
 /** A node's numbers; its name and effect words are `TECH_NAME` / `TECH_EFFECT` (ui/text/names.ts). */
@@ -2719,6 +2740,24 @@ export const TECH: Readonly<Record<TechId, TechNode>> = {
     cost: 2500,
     needs: ['molotov-mk2'],
   },
+  'toxin-rounds': {
+    branch: 'toxin',
+    tier: 1,
+    cost: 500,
+    needs: [],
+  },
+  'toxin-rounds-mk2': {
+    branch: 'toxin',
+    tier: 2,
+    cost: 1000,
+    needs: ['toxin-rounds'],
+  },
+  'toxin-rounds-mk3': {
+    branch: 'toxin',
+    tier: 3,
+    cost: 2500,
+    needs: ['toxin-rounds-mk2'],
+  },
 };
 /** The card a Tier 4 node puts in the fight's pool (ID-264); its id is the node's. */
 export const TECH_CARD = {
@@ -2744,12 +2783,14 @@ export const TECH_FX = {
   slick: 1.25,
   /**
    * Mk II and Mk III (ID-284), the highest counts: a factor on Incendiary's burn, Shock's paralysis,
-   * Frag's burst and Molotov's fire damage; Flashbang's extra stun seconds; Mk III's wider reach (a
+   * Frag's burst, Molotov's fire damage, Toxin Rounds' poison (`toxin`) and its death burst (`toxinBurst`); Flashbang's extra stun seconds; Mk III's wider reach (a
    * factor on Frag's burst, Flashbang's landing circle) and Molotov's extra fire seconds.
    */
   mk: {
     burn: [1.15, 1.3],
     shock: [1.15, 1.3],
+    toxin: [1.15, 1.3],
+    toxinBurst: [1.15, 1.3],
     frag: [1.15, 1.3],
     fire: [1.15, 1.3],
     stun: [0.5, 1],
@@ -2761,6 +2802,7 @@ export const TECH_FX = {
     'hollow-points',
     'incendiary-rounds',
     'shock-rounds',
+    'toxin-rounds',
     'piercing-rounds',
     'scavenged-ammo',
   ],

@@ -19,20 +19,28 @@ describe('the ammo and throwable nodes add no offer weight (ID-284)', () => {
   const KIT_IDS = TECH_IDS.slice(14);
   const OLD_IDS = TECH_IDS.slice(0, 14);
 
-  it('lists no card for any of the five new branches', () => {
-    for (const branch of ['incendiary', 'shock', 'frag', 'flashbang', 'molotov'] as const) {
+  it('lists no card for any of the six new branches', () => {
+    for (const branch of [
+      'incendiary',
+      'shock',
+      'toxin',
+      'frag',
+      'flashbang',
+      'molotov',
+    ] as const) {
       expect(TECH_CARDS[branch], branch).toEqual([]);
     }
   });
 
-  it('all 15 researched change no card’s weight, the unlocked cards included', () => {
+  it('all 18 researched change no card’s weight, the unlocked cards included', () => {
     const roomy: UpgradeId[] = [...UPGRADE_IDS];
     expect(offerWeights(roomy, [...KIT_IDS])).toEqual(roomy.map(() => 1));
-    // The 14 give what they gave; the 15 on top change nothing.
+    // The 14 give what they gave; the 18 on top change nothing.
     expect(offerWeights(roomy, [...TECH_IDS])).toEqual(offerWeights(roomy, [...OLD_IDS]));
     for (const id of [
       'incendiary-rounds',
       'shock-rounds',
+      'toxin-rounds',
       'frag-grenades',
       'flashbang',
       'molotov',
@@ -42,7 +50,7 @@ describe('the ammo and throwable nodes add no offer weight (ID-284)', () => {
     }
   });
 
-  it('offers roll the same with the 15 researched as without', () => {
+  it('offers roll the same with the 18 researched as without', () => {
     const base = state(OLD_IDS);
     const kit = state([...TECH_IDS]);
     for (let seed = 0; seed < 50; seed++) {
@@ -72,7 +80,7 @@ describe('offerWeights', () => {
     expect(offerWeights(roomy, ['razor-wire'])[roomy.indexOf('barbed-wire')]).toBeCloseTo(1.15, 9);
   });
 
-  it('the wider five-card ammo list differs from the exclusive slot’s two', () => {
+  it('the wider six-card ammo list differs from the exclusive slot’s three', () => {
     expect([...TECH_AMMO_CARDS].sort()).toEqual(
       [
         'hollow-points',
@@ -80,6 +88,7 @@ describe('offerWeights', () => {
         'piercing-rounds',
         'scavenged-ammo',
         'shock-rounds',
+        'toxin-rounds',
       ].sort(),
     );
     expect(TECH_CARDS.wall).toEqual([]);
@@ -108,8 +117,8 @@ describe('offerWeights', () => {
     // At 7 the cap binds: the ratio between two extras is kept.
     const small: UpgradeId[] = [...TECH_AMMO_CARDS, 'barbed-wire', 'oil-bomb'];
     const w = offerWeights(small, full);
-    expect((w[5]! - 1) / (w[0]! - 1)).toBeCloseTo(0.45 / 0.3, 9);
-    expect(w.reduce((a, b) => a + (b - 1), 0)).toBeCloseTo(0.25 * 7, 9);
+    expect((w[6]! - 1) / (w[0]! - 1)).toBeCloseTo(0.45 / 0.3, 9);
+    expect(w.reduce((a, b) => a + (b - 1), 0)).toBeCloseTo(0.25 * 8, 9);
   });
 });
 
