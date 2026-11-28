@@ -315,9 +315,10 @@ export function createRoster(
   let combining = false;
   // Folds (ID-256): the stored choice read once. Details also opens for this visit alone when a
   // survivor is picked or asked for (`detailsOpen`), without changing what is kept. A patrol's
-  // block folds for this visit only (by its number).
+  // block folds for this visit only (by its number), inside the On patrol section's kept fold.
   const folds = readRosterFolds(opts.storage ?? null);
   let benchOpen = !folds.bench;
+  let patrolOpen = !folds.patrol;
   // The kept Details fold, live (the stored one changes with it); `detailsOpen` is what shows now.
   let keptDetails = !folds.details;
   let detailsOpen = keptDetails;
@@ -386,9 +387,18 @@ export function createRoster(
     draw('fold:bench');
   });
   // Out on a World map patrol (ID-230): under the bench, one block per patrol (ID-234), each
-  // named and timed in a header over its members' cards, the bench's look.
-  const patrolLabel = el('p', 'rv-tabs-label');
+  // named and timed in a header over its members' cards, the bench's look. The whole section
+  // folds from its title too, kept like the Bench's; each block's own fold is inside it.
+  const patrolLabel = foldButton('rv-tabs-label', 'fold:patrols', 'rv-fold-patrols');
   const patrolBlocks = el('div', 'rv-patrols');
+  const patrolBody = el('div', 'rv-fold-body');
+  patrolBody.id = 'rv-fold-patrols';
+  patrolBody.append(patrolBlocks);
+  patrolLabel.addEventListener('click', () => {
+    patrolOpen = !patrolOpen;
+    writeRosterFold(opts.storage ?? null, 'patrol', !patrolOpen);
+    draw('fold:patrols');
+  });
   // The blocks drawn last, and what they were drawn from (`patrolKey`): `tick` moves their times.
   let shown: { p: MapPatrol; block: HTMLElement; time: HTMLElement }[] = [];
   let shownKey = '';
@@ -487,7 +497,7 @@ export function createRoster(
   };
   const squadBox = box('squad', squadRow, tabs);
   const benchBox = box('bench', benchLabel, benchBody);
-  const patrolBox = box('patrol', patrolLabel, patrolBlocks);
+  const patrolBox = box('patrol', patrolLabel, patrolBody);
   const detailsBox = box('details', paneClose, detailsLabel, detailsBody);
   const statusLine = el('p', 'rv-status');
   statusLine.setAttribute('role', 'status');
@@ -575,6 +585,8 @@ export function createRoster(
     benchBody.hidden = !benchOpen;
     benchLabel.setAttribute('aria-expanded', String(benchOpen));
     patrolBox.hidden = patrolLabel.hidden = patrolBlocks.hidden = patrol.length === 0;
+    patrolBody.hidden = !patrolOpen;
+    patrolLabel.setAttribute('aria-expanded', String(patrolOpen));
     detailsBody.hidden = !detailsOpen;
     detailsLabel.setAttribute('aria-expanded', String(detailsOpen));
     // For the phone shell's CSS (ID-277): the attribute is there only with the pane open.

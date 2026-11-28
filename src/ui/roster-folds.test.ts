@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-// ID-256: the Roster's sections each in a box; Bench, each patrol and Details fold shut from
-// their header. Bench and Details are kept in this browser; a patrol's fold is for this visit.
+// ID-256: the Roster's sections each in a box; Bench, On patrol, each patrol and Details fold
+// shut from their header. Bench, On patrol and Details are kept in this browser; a single
+// patrol's fold is for this visit.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { recruit } from '../core/camp.ts';
 import { newGame, type GameState, type RosterDefender } from '../core/game.ts';
@@ -263,7 +264,7 @@ describe('the squad keeps its raised look by what is not hidden (ID-256)', () =>
     m.roster.open('recruit-1');
     const lists = () => m.scrim.querySelector('.rv-bench:not([hidden])') !== null;
     expect(lists()).toBe(raised);
-    for (const k of ['fold:bench', 'fold:patrol:1']) {
+    for (const k of ['fold:bench', 'fold:patrol:1', 'fold:patrols']) {
       m.scrim.querySelector<HTMLElement>(`[data-key="${k}"]`)?.click();
     }
     expect(lists()).toBe(raised);
@@ -309,9 +310,50 @@ describe('the patrol folds (ID-256)', () => {
     expect(state(m, m.key('fold:patrol:1'))).toEqual({ expanded: 'true', shown: true });
   });
 
-  it('the patrol label is a plain title, not a toggle', () => {
+  it('the On patrol title folds the whole section, kept; focus stays on it', () => {
     const m = mount(two());
     m.roster.open('recruit-1');
-    expect(m.q('.rv-box-patrol > .rv-tabs-label').tagName).toBe('P');
+    const head = m.key('fold:patrols');
+    expect(head.tagName).toBe('BUTTON');
+    expect(head.textContent).toBe('On patrol 2');
+    expect(state(m, head)).toEqual({ expanded: 'true', shown: true });
+    head.focus();
+    head.click();
+    expect(state(m, m.key('fold:patrols'))).toEqual({ expanded: 'false', shown: false });
+    expect(document.activeElement).toBe(m.key('fold:patrols'));
+    expect(m.storage!.sets).toEqual([[ROSTER_FOLD_KEYS.patrol, '1']]);
+    // Both blocks sit in the shut region; the box itself stays, title showing.
+    const region = m.q('#rv-fold-patrols');
+    expect(region.querySelectorAll('.rv-patrol-block')).toHaveLength(2);
+    expect(m.q('.rv-box-patrol').hidden).toBe(false);
+    m.roster.refresh();
+    m.roster.tick(NOW + 61_000);
+    expect(state(m, m.key('fold:patrols'))).toEqual({ expanded: 'false', shown: false });
+    m.key('fold:patrols').click();
+    expect(state(m, m.key('fold:patrols'))).toEqual({ expanded: 'true', shown: true });
+    expect(m.storage!.data.get(ROSTER_FOLD_KEYS.patrol)).toBe('0');
+  });
+
+  it("a block's own fold is untouched by the section's", () => {
+    const m = mount(two());
+    m.roster.open('recruit-1');
+    m.key('fold:patrol:1').click();
+    m.key('fold:patrols').click();
+    m.key('fold:patrols').click();
+    expect(state(m, m.key('fold:patrol:1'))).toEqual({ expanded: 'false', shown: false });
+    expect(state(m, m.key('fold:patrol:2'))).toEqual({ expanded: 'true', shown: true });
+  });
+
+  it('the kept choice opens a new Roster with On patrol shut; other values open', () => {
+    const store = memory();
+    const m = mount(two(), store);
+    m.roster.open('recruit-1');
+    m.key('fold:patrols').click();
+    const again = mount(two(), store);
+    again.roster.open('recruit-1');
+    expect(state(again, again.key('fold:patrols'))).toEqual({ expanded: 'false', shown: false });
+    const odd = mount(two(), memory({ [ROSTER_FOLD_KEYS.patrol]: 'true' }));
+    odd.roster.open('recruit-1');
+    expect(state(odd, odd.key('fold:patrols')).shown).toBe(true);
   });
 });

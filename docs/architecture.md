@@ -86,7 +86,7 @@ gives `levelScale`, `camp.ts` gives `recruit`.
 | `save.ts` | Versioned JSON save (`SAVE_VERSION`), `encodeSave` / `decodeSave`, one `read*` allow-list reader per part of `GameState` (`readThemes`, v26: seed, cleared themes, and the `t<k>` theme-gun checks; `readTech`, v27: the Research Center nodes, tolerant, never refuses the save), upgrades from older versions. |
 | `validate.ts` | Small allow-list readers (`num`, `int`, `oneOf`, …) used by every `save.ts` reader. |
 | `code.ts` | The backup code: export and import the save as one line of text. |
-| `settings.ts` | Settings outside the save: mute, volumes, speed, reduced motion, auto-strike, chatter (`ChatterLevel`, `CHATTER_LEVELS`), how-to seen, Airstrike hint seen, Roster folds (ID-256: Bench and Details shut or open; only "1" is shut). |
+| `settings.ts` | Settings outside the save: mute, volumes, speed, reduced motion, auto-strike, chatter (`ChatterLevel`, `CHATTER_LEVELS`), how-to seen, Airstrike hint seen, Roster folds (ID-256: Bench, On patrol and Details shut or open; only "1" is shut). |
 | `debug.ts` | The debug URL flag and its separate save slot. |
 | `testing.ts` | Old-save fixtures for migration tests. |
 

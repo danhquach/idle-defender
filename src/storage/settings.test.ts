@@ -443,22 +443,26 @@ describe('Airstrike hint seen (ID-232)', () => {
 });
 
 describe('the Roster folds (ID-256)', () => {
-  const open = { bench: false, details: false };
+  const open = { bench: false, patrol: false, details: false };
   const zeroWidth = String.fromCodePoint(0x200b);
   const fullwidthOne = String.fromCodePoint(0xff11);
 
-  it('nothing stored: both open', () => {
+  it('nothing stored: all open', () => {
     expect(readRosterFolds(memory())).toEqual(open);
     expect(readRosterFolds(null)).toEqual(open);
   });
 
   it("only the exact '1' closes a section, each on its own key", () => {
     expect(readRosterFolds(memory({ [ROSTER_FOLD_KEYS.bench]: '1' }))).toEqual({
+      ...open,
       bench: true,
-      details: false,
+    });
+    expect(readRosterFolds(memory({ [ROSTER_FOLD_KEYS.patrol]: '1' }))).toEqual({
+      ...open,
+      patrol: true,
     });
     expect(readRosterFolds(memory({ [ROSTER_FOLD_KEYS.details]: '1' }))).toEqual({
-      bench: false,
+      ...open,
       details: true,
     });
   });
@@ -476,7 +480,11 @@ describe('the Roster folds (ID-256)', () => {
     [''],
     ['0'],
   ])('a hostile stored value (%#) reads as open', (raw) => {
-    const s = memory({ [ROSTER_FOLD_KEYS.bench]: raw, [ROSTER_FOLD_KEYS.details]: raw });
+    const s = memory({
+      [ROSTER_FOLD_KEYS.bench]: raw,
+      [ROSTER_FOLD_KEYS.patrol]: raw,
+      [ROSTER_FOLD_KEYS.details]: raw,
+    });
     expect(readRosterFolds(s)).toEqual(open);
   });
 
@@ -501,9 +509,11 @@ describe('the Roster folds (ID-256)', () => {
   it("writes exactly '1' or '0' on the constant keys, and never throws", () => {
     const s = memory();
     writeRosterFold(s, 'bench', true);
+    writeRosterFold(s, 'patrol', true);
     writeRosterFold(s, 'details', true);
     expect([...s.data]).toEqual([
       [ROSTER_FOLD_KEYS.bench, '1'],
+      [ROSTER_FOLD_KEYS.patrol, '1'],
       [ROSTER_FOLD_KEYS.details, '1'],
     ]);
     writeRosterFold(s, 'bench', false);
