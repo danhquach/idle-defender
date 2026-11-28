@@ -4,6 +4,7 @@
 // Like the Menu it sits outside `root`, which goes inert behind it, and its keys stay in it:
 // Enter is the main action, Esc goes back.
 import { el, skillHelp, SQUAD_LOSS_RULE } from './hud.ts';
+import { holdField, releaseField } from './shield.ts';
 import { createTitleLogo } from './introTitle.ts';
 
 export const INTRO_TITLE = 'The Long Hold';
@@ -165,13 +166,14 @@ export function createIntro(root: HTMLElement, opts: IntroOptions): Intro {
     confirmBox.hidden = next !== 'confirm';
     card.hidden = next !== 'card';
     if (next === 'closed') {
-      root.removeAttribute('inert');
+      releaseField(root, scrim);
       // The title art is for launch only: a card opened later from the Menu goes over plain dark.
       art?.remove();
       shade.remove();
       return;
     }
-    root.setAttribute('inert', '');
+    // A full hold: the rail is dead behind the title screen and the Help card too (ID-276).
+    holdField(root, scrim, { rail: false });
     dialog.setAttribute(
       'aria-labelledby',
       next === 'card' ? cardTitle.id : next === 'confirm' ? question.id : title.id,

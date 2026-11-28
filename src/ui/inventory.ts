@@ -1604,8 +1604,11 @@ export const EDGE_SPEED = 12;
 
 export interface Inventory {
   isOpen(): boolean;
-  /** Opens the Weapons tab; with `uid`, on that stash gun when it is there (ID-209). */
-  open(uid?: string): void;
+  /**
+   * Opens the Weapons tab; with `uid`, on that stash gun when it is there (ID-209). The keyboard
+   * goes back to `from` on a close (the rail's button, on the phone shell).
+   */
+  open(uid?: string, from?: HTMLElement | null): void;
   /** The top-bar button that opens it. */
   readonly button: HTMLElement;
   close(): void;
@@ -2769,9 +2772,9 @@ export function createInventory(
   const api: Inventory = {
     isOpen: () => opened,
     button: openButton,
-    open(uid) {
+    open(uid, from) {
       wanted = uid ?? null;
-      win.open('weapons');
+      win.open('weapons', from);
       wanted = null;
     },
     close() {

@@ -98,13 +98,18 @@ export interface ResearchOptions {
   state(): ResearchState;
   /** Buys node `id` (asks first, checks again after the answer); null when the player said no. */
   onResearch(id: TechId): Answer | Promise<Answer>;
+  /** The window opened or closed (the rail's lit button follows). */
+  onChange?: () => void;
 }
 
 export interface ResearchCenter {
   /** The top-bar button. */
   readonly button: HTMLButtonElement;
+  /** The window's dialog: what the button controls. */
+  readonly dialog: HTMLElement;
   isOpen(): boolean;
   open(from?: HTMLElement | null): void;
+  close(): void;
   /** Re-reads the camp: the tab's count, the button's dot, and the chart when it is on show. */
   refresh(): void;
 }
@@ -209,6 +214,7 @@ export function connectors(
 export function createResearchCenter(root: HTMLElement, opts: ResearchOptions): ResearchCenter {
   const doc = root.ownerDocument;
   const win = createCampWindow(root);
+  if (opts.onChange) win.onChange(opts.onChange);
   let opened = false;
   let selected: TechId | null = null;
   let drawn: { game: GameState; can: boolean } | null = null;
@@ -386,10 +392,12 @@ export function createResearchCenter(root: HTMLElement, opts: ResearchOptions): 
 
   return {
     button,
+    dialog: win.dialog,
     isOpen: () => opened,
     open(from) {
       win.open('upgrades', from);
     },
+    close: () => win.close(),
     refresh() {
       const { game, canBuy, resumes } = opts.state();
       const ready = techReady(game) && canBuy;

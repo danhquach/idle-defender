@@ -13,6 +13,8 @@ import { versionText } from './version.ts';
 import { AUTO_KEY, ENEMY_NAME, el, skillHelp, SPEED_KEYS, SQUAD_LOSS_RULE } from './hud.ts';
 import { classBadge } from './classicon.ts';
 import { railIcon } from './railicon.ts';
+import { isShortTouch, watchShortTouch } from './landscape.ts';
+import { holdField, releaseField } from './shield.ts';
 import { CLASS_LINES, TRAIT_NOTE, TRAIT_ROWS } from './statlines.ts';
 
 /** What the Save tab says about a refused code. */
@@ -245,6 +247,8 @@ export interface MenuOptions {
   onChatter: (level: ChatterLevel) => void;
   /** The Help tab's button (ID-106): the menu closes and the how-to-play card opens. */
   onHowToCard?: () => void;
+  /** The menu opened or closed (the rail's lit button follows). */
+  onToggle?: () => void;
 }
 
 /** The chatter levels' names, in the order shown (ID-085). */
@@ -300,11 +304,24 @@ export function createMenu(root: HTMLElement, opts: MenuOptions): Menu {
   dialog.setAttribute('aria-modal', 'true');
   dialog.setAttribute('aria-labelledby', 'menu-title');
   dialog.tabIndex = -1;
+  // What the rail's Menu button controls (ID-276).
+  dialog.id = 'menu-dialog';
   scrim.append(dialog);
   doc.body.append(scrim);
   // A click on the backdrop neither closes the menu nor takes focus out of it.
   scrim.addEventListener('mousedown', (e) => {
     if (e.target === scrim) e.preventDefault();
+  });
+  // On the phone shell a tap on the empty backdrop below a short sheet closes it (a tap that
+  // began there: a drag that ends on the backdrop, a slider let go, is not one).
+  let downOnScrim = false;
+  scrim.addEventListener('pointerdown', (e) => {
+    downOnScrim = e.target === scrim;
+  });
+  scrim.addEventListener('click', (e) => {
+    const tap = downOnScrim && e.target === scrim;
+    downOnScrim = false;
+    if (tap && isShortTouch(window)) api.close();
   });
 
   const title = el('h2', 'menu-title', 'Menu');
@@ -347,6 +364,19 @@ export function createMenu(root: HTMLElement, opts: MenuOptions): Menu {
   const foot = el('div', 'menu-foot');
   foot.append(hint, done);
   dialog.append(head, tablist, ...panels.values(), foot);
+
+  /**
+   * The phone shell's sheet (ID-276): no ×, Esc hint, Close or foot (the lit rail button closes
+   * it), and the dialog not modal (the rail beside it stays live). Hidden by the attribute, so
+   * Tab skips them; leaving the shell restores all.
+   */
+  function applySheet(): void {
+    const on = isShortTouch(window);
+    dialog.setAttribute('aria-modal', String(!on));
+    closeX.hidden = foot.hidden = hint.hidden = done.hidden = on;
+  }
+  // Followed while open only: a closed menu has no sheet to redo.
+  let unwatch: (() => void) | null = null;
 
   // Settings.
   const motion = el('input', 'menu-check-box');
@@ -744,18 +774,24 @@ export function createMenu(root: HTMLElement, opts: MenuOptions): Menu {
       load.message.textContent = '';
       fresh.message.textContent = '';
       scrim.hidden = false;
-      root.setAttribute('inert', '');
+      holdField(root, scrim);
+      unwatch = watchShortTouch(window, applySheet);
+      applySheet();
       api.refresh();
       const alert = saveStatus === 'off' || saveStatus === 'failed';
       select(alert ? 'save' : tab, true);
+      opts.onToggle?.();
     },
     close() {
       if (!opened) return;
       opened = false;
       for (const c of confirms) c.cancel();
       scrim.hidden = true;
-      root.removeAttribute('inert');
+      unwatch?.();
+      unwatch = null;
+      releaseField(root, scrim);
       button.focus();
+      opts.onToggle?.();
     },
     refresh() {
       if (!opened) return;

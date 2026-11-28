@@ -35,6 +35,31 @@ function motion(reduce: boolean): void {
 
 const press = (key: string) => document.dispatchEvent(new KeyboardEvent('keydown', { key }));
 
+describe('the offer keys under a window (ID-276)', () => {
+  it('a card key does nothing while the hud is inert (a phone sheet leaves the field itself live)', () => {
+    const chosen: number[] = [];
+    const { hud, panel } = mount((i) => chosen.push(i));
+    hud.update(withOffer(offer('sharpshooter', 'ricochet', 'frag-grenades')));
+    const root = panel.closest('.hud')!.parentElement!;
+    root.querySelector('.hud')!.setAttribute('inert', '');
+    press('1');
+    expect(chosen).toEqual([]);
+    root.querySelector('.hud')!.removeAttribute('inert');
+    press('1');
+    expect(chosen).toEqual([0]);
+  });
+
+  it('nor while the whole field is inert (the title screen, a confirm)', () => {
+    const chosen: number[] = [];
+    const { hud, panel } = mount((i) => chosen.push(i));
+    hud.update(withOffer(offer('sharpshooter', 'ricochet', 'frag-grenades')));
+    const root = panel.closest('.hud')!.parentElement!;
+    root.setAttribute('inert', '');
+    press('2');
+    expect(chosen).toEqual([]);
+  });
+});
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();

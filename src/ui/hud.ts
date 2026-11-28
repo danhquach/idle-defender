@@ -3551,8 +3551,9 @@ export function createHud(
     onOffer({ act });
   }
   document.addEventListener('keydown', (e) => {
-    // Not while the field is inert behind the open menu.
-    if (e.repeat || root.closest('[inert]')) return;
+    // Not while the field is inert behind an open window: the whole of it, or on the phone shell
+    // (ID-276) every part of it but the rail, which a sheet leaves live.
+    if (e.repeat || hud.closest('[inert]')) return;
     const index = ['1', '2', '3'].indexOf(e.key);
     if (index >= 0) choose(index);
     // Reroll, Skip and Ban by their place on the keyboard (ID-210), as the fight's keys are.

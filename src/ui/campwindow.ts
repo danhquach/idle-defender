@@ -6,6 +6,8 @@
 // says what happens when it is shown, hidden or asked to step back. Text reaches the page
 // only through textContent.
 import { el } from './hud.ts';
+import { isShortTouch, watchShortTouch } from './landscape.ts';
+import { holdField, releaseField } from './shield.ts';
 
 export interface CampTab {
   /** Names the tab in ids and in `data-tab`: letters only. */
@@ -42,6 +44,8 @@ export interface CampWindow {
    */
   open(id: string, from?: HTMLElement | null): void;
   close(): void;
+  /** `cb` runs whenever the open tab changes or the window closes (the rail's lit button follows). */
+  onChange(cb: () => void): void;
   /** Sets the label on tab `id`'s button (a count, say); the strip's name keeps the tab's own label. */
   relabel(id: string, label: string): void;
   /** Whether closing resumes a fight: the close button, the hint and the foot's button say so. */
@@ -61,8 +65,11 @@ export function shortLabel(button: HTMLElement, lead: string, tail: string): voi
 const ORDER = ['roster', 'weapons', 'craft', 'map'];
 const place = (id: string): number => (ORDER.indexOf(id) + ORDER.length + 1) % (ORDER.length + 1);
 
+let serial = 0;
+
 export function createCampWindow(root: HTMLElement): CampWindow {
   const doc = root.ownerDocument;
+  const listeners: (() => void)[] = [];
   const tabs: {
     tab: CampTab;
     button: HTMLButtonElement;
@@ -81,10 +88,23 @@ export function createCampWindow(root: HTMLElement): CampWindow {
   dialog.setAttribute('role', 'dialog');
   dialog.setAttribute('aria-modal', 'true');
   dialog.tabIndex = -1;
+  // What the rail's button controls (ID-276).
+  dialog.id = `camp-dialog-${++serial}`;
   scrim.append(dialog);
   doc.body.append(scrim);
   scrim.addEventListener('mousedown', (e) => {
     if (e.target === scrim) e.preventDefault();
+  });
+  // On the phone shell a tap on the empty backdrop below a short sheet closes it. It must also
+  // have begun there: a drag that ends on the backdrop (a gun let go outside) is not a tap.
+  let downOnScrim = false;
+  scrim.addEventListener('pointerdown', (e) => {
+    downOnScrim = e.target === scrim;
+  });
+  scrim.addEventListener('click', (e) => {
+    const tap = downOnScrim && e.target === scrim;
+    downOnScrim = false;
+    if (tap && isShortTouch(window)) api.close();
   });
 
   const tablist = el('div', 'camp-tabs');
@@ -105,6 +125,26 @@ export function createCampWindow(root: HTMLElement): CampWindow {
   const foot = el('div', 'camp-foot');
   foot.append(hint, done);
   dialog.append(head, foot);
+
+  /**
+   * The phone shell's sheet (ID-276): no ×, Esc hint or Done (the lit rail button closes it), the
+   * tab strip gone but for the Weapons and Craft pills on those two tabs, the status line up in
+   * the header's band (no foot), and the dialog not modal (the rail beside it stays live).
+   * Hidden by the attribute, so Tab and the arrows skip them; leaving the shell restores all.
+   */
+  function applySheet(): void {
+    const on = isShortTouch(window);
+    dialog.setAttribute('aria-modal', String(!on));
+    closeX.hidden = hint.hidden = done.hidden = on;
+    const pills = shown?.id === 'weapons' || shown?.id === 'craft';
+    for (const t of tabs) {
+      t.button.hidden = on && !(pills && (t.tab.id === 'weapons' || t.tab.id === 'craft'));
+    }
+    if (on && foot.parentElement !== head) head.insertBefore(foot, tablist.nextSibling);
+    else if (!on && foot.parentElement !== dialog) dialog.append(foot);
+  }
+  // Followed while open only: a closed window has no sheet to redo.
+  let unwatch: (() => void) | null = null;
 
   /** What Tab may land on: shown, enabled controls (a grid or a tab strip is one stop). */
   function stops(): HTMLElement[] {
@@ -140,17 +180,19 @@ export function createCampWindow(root: HTMLElement): CampWindow {
       }
       return;
     }
-    const index = tabs.findIndex((t) => t.button === e.target);
+    // A tab hidden on the phone shell is no stop on the strip.
+    const strip = tabs.filter((t) => !t.button.hidden);
+    const index = strip.findIndex((t) => t.button === e.target);
     if (index < 0) return;
     const moves: Record<string, number> = {
       ArrowLeft: index - 1,
       ArrowRight: index + 1,
       Home: 0,
-      End: tabs.length - 1,
+      End: strip.length - 1,
     };
     if (!Object.hasOwn(moves, e.key)) return;
     e.preventDefault();
-    const next = tabs[(moves[e.key]! + tabs.length) % tabs.length]!;
+    const next = strip[(moves[e.key]! + strip.length) % strip.length]!;
     select(next.tab);
     next.button.focus();
   });
@@ -168,8 +210,10 @@ export function createCampWindow(root: HTMLElement): CampWindow {
       t.tab.panel.hidden = t.tools.hidden = t.status.hidden = !on;
       if (on) dialog.setAttribute('aria-labelledby', t.button.id);
     }
+    applySheet();
     before?.hide();
     next.show();
+    for (const cb of listeners) cb();
   }
 
   const api: CampWindow = {
@@ -204,7 +248,7 @@ export function createCampWindow(root: HTMLElement): CampWindow {
       tablist.insertBefore(button, tabs[i]?.button ?? null);
       head.insertBefore(tools, closeX);
       foot.insertBefore(status, done);
-      dialog.insertBefore(tab.panel, foot);
+      dialog.insertBefore(tab.panel, foot.parentElement === dialog ? foot : null);
       tabs.splice(i, 0, { tab, button, tools, status });
       // The strip is called by what it holds ("Roster, Weapons and Craft"); the window takes
       // the open tab's name.
@@ -227,7 +271,11 @@ export function createCampWindow(root: HTMLElement): CampWindow {
         opener = at instanceof HTMLElement && root.contains(at) ? at : null;
         first = next;
         scrim.hidden = false;
-        root.setAttribute('inert', '');
+        holdField(root, scrim);
+        unwatch = watchShortTouch(window, applySheet);
+      } else if (from instanceof HTMLElement && root.contains(from)) {
+        // Switched from the rail: the keyboard goes back to the button that was tapped.
+        opener = from;
       }
       select(next);
     },
@@ -242,9 +290,15 @@ export function createCampWindow(root: HTMLElement): CampWindow {
       }
       last.hide();
       scrim.hidden = true;
-      root.removeAttribute('inert');
+      unwatch?.();
+      unwatch = null;
+      releaseField(root, scrim);
       (opener?.isConnected ? opener : (first ?? last).button).focus();
       opener = first = null;
+      for (const cb of listeners) cb();
+    },
+    onChange(cb) {
+      listeners.push(cb);
     },
     relabel(id, label) {
       const t = tabs.find((x) => x.tab.id === id);
