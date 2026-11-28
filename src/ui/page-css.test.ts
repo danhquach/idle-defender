@@ -1696,3 +1696,205 @@ describe('the phone sheets (ID-276)', () => {
       expect(outside.includes(s), s).toBe(false);
   });
 });
+
+describe('Roster and Weapons use the whole sheet on the phone (ID-277)', () => {
+  const query = `@media ${SHORT_TOUCH} {`;
+  const at = rules.indexOf(query);
+  const shell = rules.slice(at, rules.indexOf('\n}\n', at));
+  const esc = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  /** One rule's body inside the shell block (the exact selector text, comma lists included). */
+  const rule = (selector: string): string => {
+    const m = new RegExp(`(?:^|\\n)  ${esc(selector)} \\{([^}]*)\\}`).exec(shell);
+    if (!m) throw new Error(`no rule ${selector} in the phone shell`);
+    return m[1]!;
+  };
+  /** The nested under-700 blocks of the shell, joined. */
+  const swap = [
+    ...shell.matchAll(/\n {2}@container \(max-width: 699px\) \{([\s\S]*?)\n {2}\}(?:\n|$)/g),
+  ]
+    .map((m) => m[1]!)
+    .join('\n');
+
+  it('every rule of it is in the one shell block: nothing outside names the panes', () => {
+    const outside = rules.replace(shell, '');
+    expect(outside).not.toMatch(/\.pane-x|data-details|\.inv-scroll|\.inv-squad-zone/);
+    expect(swap).not.toBe('');
+  });
+
+  it('the close x is one 44 px box in both tabs, shown only while the attribute is off', () => {
+    const x = rule('.pane-x:not([hidden])');
+    expect(x).toMatch(/width: 44px;/);
+    expect(x).toMatch(/height: 44px;/);
+    expect(rule('.camp-scrim .rv-box-details > .pane-x:not([hidden])')).toMatch(
+      /position: sticky;/,
+    );
+    expect(rule('.camp-scrim .inv-panel > .pane-x:not([hidden])')).toMatch(/grid-column: 3;/);
+  });
+
+  it('Roster: the cards are one row that never wraps, at most 124 px, the portrait capped', () => {
+    const row = rule('.camp-scrim .roster-dialog .rv-tabs:not(.rv-bench)');
+    expect(row).toMatch(/grid-auto-flow: column;/);
+    expect(row).toMatch(/grid-template-columns: none;/);
+    expect(row).toMatch(/grid-auto-columns: minmax\(0, 124px\);/);
+    expect(rule('.camp-scrim .roster-dialog .rv-tab .roster-avatar-xs')).toMatch(
+      /width: min\(100%, 40px\);/,
+    );
+    expect(rule('.camp-scrim .rv-btn,\n  .camp-scrim .rv-auto,\n  .camp-scrim .rv-fold')).toMatch(
+      /min-height: 44px;/,
+    );
+  });
+
+  it('Roster: the squad controls are in the sheet header beside Best gun, 44 px, one row, no wait line', () => {
+    expect(rule('.camp-scrim .camp-tools')).toMatch(/flex-wrap: nowrap;/);
+    expect(rule('.camp-scrim .camp-tools > .rv-squad-row')).toMatch(/display: contents;/);
+    expect(rule('.camp-scrim .camp-tools .rv-tabs-label')).toMatch(/height: 44px;/);
+    expect(rule('.camp-scrim .camp-tools .rv-squad-wait')).toMatch(/display: none;/);
+  });
+
+  it('a DPS line wraps by words, never cut, in the Roster gun row and the Weapons details', () => {
+    const line = rule('.camp-scrim .rv-slot-line');
+    expect(line).toMatch(/white-space: normal;/);
+    expect(line).toMatch(/text-overflow: clip;/);
+    expect(rule('.camp-scrim .inv-power-sep')).toMatch(/display: none;/);
+    expect(rule('.camp-scrim .inv-power-part')).toMatch(/white-space: normal;/);
+    expect(rule('.camp-scrim .inv-details-info .inv-power')).toMatch(/flex-direction: column;/);
+  });
+
+  it('Roster pane: the gun row follows the name, level and XP; the x shares the name row', () => {
+    const top = rule('.camp-scrim .rv-box-details .rv-top');
+    expect(top).toMatch(/'pic head'\s+'pic sub'\s+'pic xp'\s+'slot slot'\s+'act act'/);
+    expect(rule('.camp-scrim .rv-box-details .rv-who-text')).toMatch(/display: contents;/);
+    expect(rule('.camp-scrim .rv-box-details > .pane-x:not([hidden])')).toMatch(
+      /margin-bottom: -44px;/,
+    );
+    expect(
+      rule('.camp-scrim .rv-box-details .rv-who-head,\n  .camp-scrim .rv-box-details .rv-phead'),
+    ).toMatch(/padding-right: 48px;/);
+  });
+
+  it('Roster: the pane is a 260 px column that sticks, scrolls on its own and is a container', () => {
+    const grid = rule(".camp-scrim .roster-dialog[data-details='open']:not([hidden])");
+    expect(grid).toMatch(/grid-template-columns: minmax\(0, 1fr\) 260px;/);
+    // The pane's own row is the last, stretching: it never lengthens the boxes' rows.
+    expect(grid).toMatch(/grid-template-rows: repeat\(3, auto\) 1fr;/);
+    const pane = rule(".camp-scrim .roster-dialog[data-details='open'] > .rv-box-details");
+    expect(pane).toMatch(/grid-row: 1 \/ -1;/);
+    expect(pane).toMatch(/position: sticky;/);
+    expect(pane).toMatch(/max-height: calc\(100dvh - 64px\);/);
+    expect(pane).toMatch(/container-type: inline-size;/);
+    expect(pane).toMatch(/overflow-y: auto;/);
+    // Shut, the Details box is not there.
+    expect(rules).toMatch(
+      /\.camp-scrim \.roster-dialog:not\(\[data-details\]\) > \.rv-box-details/,
+    );
+  });
+
+  it('Roster: with the pane open the cards are compact; under 700 the boxes go and the pane takes the width', () => {
+    const tab = rule(".camp-scrim .roster-dialog[data-details='open'] .rv-tab");
+    expect(tab).toMatch(/min-height: 44px;/);
+    expect(swap).toMatch(/grid-template-columns: minmax\(0, 1fr\);/);
+    expect(swap).toMatch(/\.rv-box:not\(\.rv-box-details\) \{\s*display: none;/);
+    expect(swap).toMatch(/\.rv-box-details \{[^}]*position: static;[^}]*max-height: none;/);
+  });
+
+  it('Roster: the gun picker starts at the pane top (the survivor row steps aside)', () => {
+    expect(rule('.camp-scrim .rv-box-details:has(.rv-phead) .rv-top')).toMatch(/display: none;/);
+  });
+
+  it('Weapons: the sheet is full height; the body steps aside so the squad and stash scroll apart', () => {
+    expect(
+      rule(
+        ".camp-scrim .camp-dialog[data-tab='roster'],\n  .camp-scrim .camp-dialog[data-tab='weapons']",
+      ),
+    ).toMatch(/height: 100%;/);
+    expect(rule('.camp-scrim .inv-body')).toMatch(/display: contents;/);
+    const panel = rule('.camp-scrim .inv-panel');
+    expect(panel).toMatch(/display: grid;/);
+    expect(panel).toMatch(/grid-template-columns: 160px minmax\(0, 1fr\);/);
+    expect(panel).toMatch(/grid-template-rows: auto minmax\(0, 1fr\);/);
+    expect(rule('.camp-scrim .inv-body > .inv-scroll')).toMatch(/overflow-y: auto;/);
+    expect(rule('.camp-scrim .inv-body > .inv-squad-zone')).toMatch(/grid-column: 1;/);
+  });
+
+  it('Weapons: details are the third column (240 px), the squad narrows first, the stash keeps three tiles', () => {
+    expect(rule(".camp-scrim .inv-panel[data-details='open']")).toMatch(
+      /grid-template-columns: 160px minmax\(0, 1fr\) 240px;/,
+    );
+    // 774 px sheet - 16 padding - 160 - 240 - 2 * 8 gaps: four 64 px tiles; 552 px: still four.
+    expect(774 - 16 - 160 - 240 - 16).toBeGreaterThanOrEqual(4 * 64 + 3 * 8);
+    expect(rule(".camp-scrim .inv-panel[data-details='open'] > .inv-details")).toMatch(
+      /grid-column: 3;/,
+    );
+    expect(rule('.camp-scrim .inv-panel > .inv-details')).toMatch(/display: none;/);
+  });
+
+  it('Weapons: under 700 the left column is 240 px, the details in the squad list place, the stash fixed', () => {
+    expect(swap).toMatch(/grid-template-columns: 240px minmax\(0, 1fr\);/);
+    expect(swap).toMatch(/\.inv-details,[^}]*\.pane-x:not\(\[hidden\]\) \{\s*grid-column: 1;/);
+    expect(swap).toMatch(/\.inv-squad-zone \{\s*display: none;/);
+    // The stash and the strip have their column named, so the squad list going moves nothing.
+    expect(rule('.camp-scrim .inv-body > .inv-tabs')).toMatch(/grid-column: 2;/);
+    expect(rule('.camp-scrim .inv-body > .inv-stash-zone')).toMatch(
+      /grid-column: 2;[^}]*grid-row: 1 \/ -1;/,
+    );
+    expect(rule('.camp-scrim .inv-body > .inv-bench-zone')).toMatch(/grid-column: 2;/);
+    // 579 px sheet: 579 - 16 - 240 - 8 leaves four 64 px tiles; 552 px still holds three or more.
+    expect(552 - 16 - 240 - 8).toBeGreaterThanOrEqual(3 * 64 + 2 * 8);
+  });
+
+  it('Weapons: one chrome row of tabs, count and slots to buy, one of tools; no help line', () => {
+    expect(rule('.camp-scrim .inv-body > .inv-tabs')).toMatch(/grid-row: 1;/);
+    expect(rule('.camp-scrim .inv-stash-tools')).toMatch(/flex-wrap: nowrap;/);
+    expect(rule('.camp-scrim .inv-stash-tools .inv-pick')).toMatch(/min-height: 44px;/);
+    expect(rule('.camp-scrim .inv-stash-tools .inv-select')).toMatch(
+      /align-items: center;[^}]*justify-content: center;/,
+    );
+    expect(rule('.camp-scrim .inv-stash-head .inv-buy')).toMatch(/min-height: 44px;/);
+    expect(rule('.camp-scrim .inv-stash-zone > .inv-note')).toMatch(/display: none;/);
+    // Under the tabs the head gives the word to them, and starts after them.
+    expect(rule('.camp-scrim .inv-panel:has(.inv-tabs) .inv-stash-word')).toMatch(
+      /clip-path: inset\(50%\);/,
+    );
+    // 251 px body: two 44 px chrome rows and their gaps leave room for two stash rows.
+    expect(251 - 2 * 44 - 2 * 4).toBeGreaterThanOrEqual(2 * 64 + 8);
+  });
+
+  it('Weapons: the squad power is small, up to two lines, its band inline; nothing there shrinks', () => {
+    const line = rule('.camp-scrim .inv-squad-zone .inv-power-line');
+    expect(line).toMatch(/display: block;/);
+    expect(line).not.toMatch(/overflow|nowrap/);
+    expect(rule('.camp-scrim .inv-squad-zone > *')).toMatch(/flex: none;/);
+  });
+
+  it('Weapons: under 560 the type and rarity menus are one Filter button, the slots button short', () => {
+    const narrow = [
+      ...shell.matchAll(/\n {2}@container \(max-width: 559px\) \{([\s\S]*?)\n {2}\}(?:\n|$)/g),
+    ]
+      .map((m) => m[1]!)
+      .join('\n');
+    expect(narrow).toMatch(/\.inv-filter-toggle \{\s*display: inline-flex;[^}]*min-height: 44px;/);
+    expect(narrow).toMatch(/\[data-pick='type'\],[^}]*\[data-pick='rarity'\] \{\s*display: none;/);
+    expect(narrow).toMatch(/\.camp-tools \.inv-buy-long \{\s*display: none;/);
+    // The stash's own column decides its button: a container of its own, 359 px and under.
+    expect(rule('.camp-scrim .inv-stash-zone')).toMatch(/container-type: inline-size;/);
+    expect(shell).toMatch(
+      /@container \(max-width: 359px\) \{\s*\.camp-scrim \.inv-stash-zone \.inv-buy-long \{\s*display: none;/,
+    );
+    expect(342).toBeLessThanOrEqual(359);
+    expect(rule('.camp-scrim .camp-tools .rv-tabs-label')).toMatch(/gap: var\(--space-4\);/);
+    // Wider, no button; and the popover rows sit under the row, half a row each.
+    expect(rule('.camp-scrim .inv-stash-tools .inv-filter-toggle')).toMatch(/display: none;/);
+    expect(narrow).toMatch(/width: calc\(50% - 2px\);/);
+  });
+
+  it('Weapons: a gun held says so once (the dock heading); the plain line goes', () => {
+    expect(rule('.camp-scrim .inv-where[data-held]')).toMatch(/display: none;/);
+  });
+
+  it('Weapons: the DPS line leads the details, and the finger targets are 44 px', () => {
+    expect(rule('.camp-scrim .inv-details-info .inv-name')).toMatch(/order: -2;/);
+    expect(rule('.camp-scrim .inv-details-info .inv-power')).toMatch(/order: -1;/);
+    expect(rule('.camp-scrim .inv-key-toggle')).toMatch(/width: 44px;[^}]*height: 44px;/);
+    expect(rule('.camp-scrim .inv-tab')).toMatch(/min-height: 44px;/);
+  });
+});
