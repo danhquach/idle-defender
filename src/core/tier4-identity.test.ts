@@ -56,7 +56,10 @@ const RECORDED: Record<string, [string, number]> = {
  * RNG positions are the same; only float text in the state differs. Taken from the branch on CI.
  */
 const NODE_22: Record<string, [string, number]> = {
-  // ID-287: emptied with the re-record; CI's values go here where they differ.
+  // ID-287: taken from the branch on CI after the re-record.
+  'bare-h9': ['403a5c4c:6524', 199658554],
+  'empty-h9': ['403a5c4c:6524', 199658554],
+  'tier13-h9': ['cc246778:6716', 199658554],
 };
 
 /** Node's major version: picks the digests recorded on that runtime. */

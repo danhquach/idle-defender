@@ -64,7 +64,9 @@ const GOLDEN: Record<string, string> = {
  * (re-taken in ID-236), the same code path that matches main above byte for byte on Node 25.
  */
 const NODE_22: Record<string, string> = {
-  // ID-287: emptied with the re-record; CI's values go here where they differ.
+  // ID-287: taken from the branch on CI after the re-record.
+  'h20-L18-lost': '6a4c509b:43605',
+  'h20-L40-won': '7bdc1b5e:19899',
 };
 
 /** Node's major version: picks the digests recorded on that runtime. */
