@@ -32,7 +32,14 @@ import { patrolOf, type MapPatrol } from '../core/scout.ts';
 import { startingHp, type HordeState } from '../core/horde.ts';
 import { fieldMaxHp, jobFits, levelOf, maxHpOf, survivorDps } from '../core/stats.ts';
 import { bestUpgrade, gunCompare, gunName, gunTiles, heldGunOf, rarityOf } from './gunpick.ts';
-import { createCampWindow, shortLabel, type CampWindow } from './campwindow.ts';
+import {
+  createCampWindow,
+  onScreen,
+  shortLabel,
+  shortOffer,
+  type CampWindow,
+} from './campwindow.ts';
+import { isShortTouch, watchShortTouch } from './landscape.ts';
 import type { Answer } from './confirm.ts';
 import {
   BEST_GUNS_LEAD,
@@ -311,7 +318,13 @@ export function createRoster(
   // block folds for this visit only (by its number).
   const folds = readRosterFolds(opts.storage ?? null);
   let benchOpen = !folds.bench;
-  let detailsOpen = !folds.details;
+  // The kept Details fold, live (the stored one changes with it); `detailsOpen` is what shows now.
+  let keptDetails = !folds.details;
+  let detailsOpen = keptDetails;
+  // The phone shell (ID-277) opens every visit with the pane shut: whether it did, so leaving the
+  // shell puts the kept fold back.
+  let phoneShut = false;
+  const phone = (): boolean => isShortTouch(window);
   const patrolsClosed = new Set<number>();
   let status = { text: '', tone: 'ok' as 'ok' | 'danger' };
   const button = el('button', 'roster-button', 'Roster');
@@ -409,8 +422,53 @@ export function createRoster(
   const detailsBody = el('div', 'rv-fold-body');
   detailsBody.id = 'rv-fold-details';
   detailsBody.append(top, panel);
+  // The phone shell's pane close, "×" (ID-277): shown with the pane open; Esc and a re-tap of the
+  // card close it too.
+  const paneClose = el('button', 'pane-x', '×');
+  paneClose.type = 'button';
+  paneClose.hidden = true;
+  paneClose.dataset.key = 'pane-close';
+  paneClose.setAttribute('aria-label', 'Close details');
+  paneClose.addEventListener('click', () => closePane());
+  /**
+   * The phone shell's header holds the squad's controls (its count, the slot to buy, Best squad,
+   * Auto) beside "Best gun" (ID-277); anywhere else they are the Squad box's first row.
+   */
+  function placeSquadRow(): void {
+    const tools = bestButton.parentElement;
+    if (phone() && tools) {
+      if (squadRow.parentElement !== tools) tools.insertBefore(squadRow, bestButton);
+    } else if (squadRow.parentElement !== squadBox) squadBox.prepend(squadRow);
+  }
+  /** Shuts the pane on the phone (the kept fold is untouched); the keyboard goes back to the card. */
+  function closePane(): void {
+    detailsOpen = false;
+    picking = false;
+    picked = null;
+    combining = false;
+    draw(`tab:${current}`);
+  }
+  /** Every visit on the phone starts with the pane shut; off it the kept fold is the way it was. */
+  function settleFold(): void {
+    if (phone()) {
+      detailsOpen = false;
+      phoneShut = true;
+      picking = false;
+      picked = null;
+      combining = false;
+    } else if (phoneShut) {
+      detailsOpen = keptDetails;
+      phoneShut = false;
+    }
+  }
+  let unwatch: (() => void) | null = null;
   detailsLabel.addEventListener('click', () => {
+    if (phone()) {
+      closePane();
+      return;
+    }
     detailsOpen = !detailsOpen;
+    keptDetails = detailsOpen;
     // Folded shut, the gun picker and the Combine pick (both inside Details) go with it, so
     // Esc never meets a picker nobody can see.
     if (!detailsOpen) {
@@ -430,7 +488,7 @@ export function createRoster(
   const squadBox = box('squad', squadRow, tabs);
   const benchBox = box('bench', benchLabel, benchBody);
   const patrolBox = box('patrol', patrolLabel, patrolBlocks);
-  const detailsBox = box('details', detailsLabel, detailsBody);
+  const detailsBox = box('details', paneClose, detailsLabel, detailsBody);
   const statusLine = el('p', 'rv-status');
   statusLine.setAttribute('role', 'status');
   pane.append(squadBox, benchBox, patrolBox, detailsBox);
@@ -479,6 +537,7 @@ export function createRoster(
   function draw(focus?: string): void {
     const { game, fight, canGear, resumes } = opts.state();
     if (!opened) return;
+    placeSquadRow();
     const want = focus ?? keyOf();
     const camp = [...game.roster, ...(game.reserve ?? [])];
     let d = camp.find((r) => r.id === current);
@@ -518,13 +577,18 @@ export function createRoster(
     patrolBox.hidden = patrolLabel.hidden = patrolBlocks.hidden = patrol.length === 0;
     detailsBody.hidden = !detailsOpen;
     detailsLabel.setAttribute('aria-expanded', String(detailsOpen));
+    // For the phone shell's CSS (ID-277): the attribute is there only with the pane open.
+    const paneOn = phone() && detailsOpen;
+    if (paneOn) pane.dataset.details = 'open';
+    else delete pane.dataset.details;
+    paneClose.hidden = !paneOn;
     const offer = game.stock
       ? slotOffer({ slots: game.slots, stock: game.stock }, 'squad', canGear)
       : null;
     buySquadButton.hidden = offer === null || !hasOthers;
     bestSquadButton.hidden = autoLabel.hidden = !hasOthers;
     if (offer) {
-      buySquadButton.textContent = offer.text;
+      buySquadButton.replaceChildren(...shortOffer(offer.text));
       buySquadButton.disabled = offer.disabled;
       buySquadButton.title = offer.title;
       buySquadButton.setAttribute(
@@ -614,9 +678,16 @@ export function createRoster(
     if (key === undefined) return;
     const find = (k: string): HTMLButtonElement | undefined =>
       [...win.dialog.querySelectorAll<HTMLButtonElement>('[data-key]')].find(
-        (b) => b.dataset.key === k && !b.disabled && !b.closest('[hidden]'),
+        (b) => b.dataset.key === k && !b.disabled && !b.closest('[hidden]') && onScreen(b),
       );
-    const target = find(key) ?? find(`tab:${current}`) ?? find('close');
+    // On the phone a control the CSS hides (a card behind the pane, the survivor row under the gun
+    // picker) is no target: the keyboard goes to the pane's own buttons, never to the page.
+    const target =
+      find(key) ??
+      (picking && phone() ? find('level') : undefined) ??
+      find(`tab:${current}`) ??
+      find('pane-close') ??
+      find('close');
     target?.focus();
   }
 
@@ -674,13 +745,21 @@ export function createRoster(
     tab.addEventListener('click', () => {
       // A card picked shows its details, even folded (for this visit; the kept choice stays).
       const unfold = !detailsOpen;
+      // On the phone the card shown is tapped again to put the pane away (ID-277).
+      if (phone() && t.id === current && !unfold) {
+        closePane();
+        return;
+      }
       detailsOpen = true;
       if (t.id === current && !unfold) return;
+      const other = t.id !== current;
       current = t.id;
       picking = false;
       picked = null;
       combining = false;
       draw(`tab:${t.id}`);
+      // Another survivor's pane starts at its top.
+      if (other) detailsBox.scrollTop = 0;
     });
     li.append(tab);
     return li;
@@ -1208,19 +1287,34 @@ export function createRoster(
       picking = false;
       picked = null;
       combining = false;
+      settleFold();
+      // A phone turned (or a window resized) while this is open: the pane and the layout follow.
+      unwatch?.();
+      unwatch = watchShortTouch(window, () => {
+        settleFold();
+        draw();
+      });
       draw(`tab:${current}`);
       pane.scrollTop = 0;
     },
     hide() {
+      unwatch?.();
+      unwatch = null;
       opened = false;
     },
-    // Esc steps back one layer first: the gun picker.
+    // Esc steps back one layer first: the gun picker, then (on the phone) the pane.
     escape() {
-      if (!picking) return false;
-      picking = false;
-      picked = null;
-      draw('slot');
-      return true;
+      if (picking) {
+        picking = false;
+        picked = null;
+        draw('slot');
+        return true;
+      }
+      if (phone() && detailsOpen) {
+        closePane();
+        return true;
+      }
+      return false;
     },
   });
 
@@ -1261,8 +1355,11 @@ export function createRoster(
       const at = from ?? (doc.activeElement as HTMLElement | null);
       at?.blur?.();
       win.open('roster', at);
-      // After the window opens: its show() starts every visit on the card.
+      // After the window opens: its show() starts every visit on the card, and on the phone with
+      // the pane shut; a survivor asked for by name has it open (ID-277).
+      if (id !== undefined && phone()) detailsOpen = true;
       if (guns) pickGuns();
+      else if (id !== undefined && phone()) draw(`tab:${current}`);
     },
     close() {
       if (opened) win.close();

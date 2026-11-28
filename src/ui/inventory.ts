@@ -71,7 +71,14 @@ import {
   type SlotOffer,
   type UpgradeOffer,
 } from './hud.ts';
-import { createCampWindow, shortLabel, type CampWindow } from './campwindow.ts';
+import {
+  createCampWindow,
+  onScreen,
+  shortLabel,
+  shortOffer,
+  type CampWindow,
+} from './campwindow.ts';
+import { isShortTouch, watchShortTouch } from './landscape.ts';
 import { classBadge } from './classicon.ts';
 import { gunCompare, gunTiles, heldGunOf } from './gunpick.ts';
 import { classLine, matchupsOpen } from './statlines.ts';
@@ -745,10 +752,13 @@ function noMatch(): HTMLElement {
 
 /** The stash heading with its buy button beside it (ID-179); the button only while slots remain. */
 function stashHead(view: InventoryView): HTMLElement {
-  const heading = el('h3', 'menu-heading inv-stash-heading', view.stashHeading);
+  const heading = el('h3', 'menu-heading inv-stash-heading');
+  // The word apart, so the phone shell can leave it to the Stash tab beside it (ID-277).
+  heading.append(el('span', 'inv-stash-word', 'Stash '), view.stashHeading.replace(/^Stash /, ''));
   if (!view.buy) return heading;
   const row = el('div', 'inv-stash-head');
   const b = button(view.buy.text, () => {}, 'inv-buy');
+  b.replaceChildren(...shortOffer(view.buy.text));
   b.dataset.buy = 'stash';
   b.disabled = view.buy.disabled;
   b.title = view.buy.title;
@@ -766,7 +776,7 @@ export const NO_MATCH = 'No stash guns match.';
  * The stash's sort and filter row (ID-192): three selects that each name themselves; with
  * `selecting` given, the Select button after them (ID-215), pressed while it is on.
  */
-function stashTools(view: InventoryView, selecting?: boolean): HTMLElement {
+function stashTools(view: InventoryView, selecting?: boolean, filter?: FilterUi): HTMLElement {
   const row = el('div', 'inv-stash-tools');
   const make = (
     kind: PickKind,
@@ -793,6 +803,18 @@ function stashTools(view: InventoryView, selecting?: boolean): HTMLElement {
     make('type', 'Show gun type', view.picks.type),
     make('rarity', 'Show rarity', view.picks.rarity),
   );
+  // The phone shell's narrow sheet shows the two filters as one "Filter" button that opens them
+  // under the row; wider, the button is not drawn by the CSS and the two selects stand.
+  if (filter) {
+    row.dataset.filter = filter.open ? 'open' : 'shut';
+    const f = button(`Filter${isFiltered(view.pick) ? ' •' : ''} ▾`, () => {}, 'inv-filter-toggle');
+    f.setAttribute('aria-expanded', String(filter.open));
+    f.setAttribute(
+      'aria-label',
+      `Filter by gun type and rarity${isFiltered(view.pick) ? ', filtered' : ''}`,
+    );
+    row.append(f);
+  }
   if (selecting !== undefined) {
     const b = button(selecting ? SELECT_DONE : SELECT_ON, () => {}, 'inv-select');
     b.setAttribute('aria-pressed', String(selecting));
@@ -815,6 +837,7 @@ export function inventoryGrid(
   selecting?: boolean,
   tabs?: BenchTabs,
   key?: IconKey,
+  filter?: FilterUi,
 ): HTMLElement[] {
   const ready = (it: InventoryItem): boolean =>
     canCombine && !!it.owned && !!rowOf(view.combine, it.owned)?.uses;
@@ -835,7 +858,7 @@ export function inventoryGrid(
   const stash = section(
     stashHead(view),
     ...(view.stash.length > 0
-      ? [stashTools(view, selecting)]
+      ? [stashTools(view, selecting, filter)]
       : [el('p', 'menu-note', STASH_EMPTY)]),
     el('p', 'menu-note inv-note', note),
     ...(view.stash.length > 0 && view.shown.length === 0
@@ -848,7 +871,8 @@ export function inventoryGrid(
           ),
         ]),
   );
-  stash.classList.add('inv-stash-zone');
+  // The phone shell (ID-277) scrolls the squad and the stash apart, each in its own box.
+  stash.classList.add('inv-stash-zone', 'inv-scroll');
   const squad = section(
     ...squadHead(key),
     ...(view.power ? [powerNote(view.power, view.powerHorde)] : []),
@@ -856,6 +880,7 @@ export function inventoryGrid(
       ...view.squad.map((s) => mark(slot(s.gun, false, s.name))),
     ]),
   );
+  squad.classList.add('inv-squad-zone', 'inv-scroll');
   // No bench and nobody on patrol (ID-242): the stash alone, as ever.
   if (!tabs || !benchShown(view)) return [squad, stash];
   const bench = benchPanel(view);
@@ -884,8 +909,15 @@ const TABS: { id: BenchTab; label: string }[] = [
 ];
 
 /** The icon key's state and what it calls (ID-253): `set` opens or closes it. */
+/** The narrow phone sheet's Filter button: whether its two filters are open (ID-277). */
+export interface FilterUi {
+  open: boolean;
+}
+
 export interface IconKey {
   open: boolean;
+  /** The stash's help line, kept in the key where the phone shell hides it from the stash (ID-277). */
+  note?: string;
   set(open: boolean): void;
 }
 
@@ -915,7 +947,7 @@ function keySample(i: number): HTMLElement {
 }
 
 /** The legend under the Squad heading: a sample and its words per line. */
-function iconKeyList(open: boolean): HTMLElement {
+function iconKeyList(open: boolean, note?: string): HTMLElement {
   const ul = el('ul', 'inv-key');
   ul.id = 'inv-key';
   ul.setAttribute('aria-label', ICON_KEY_LABEL);
@@ -926,6 +958,7 @@ function iconKeyList(open: boolean): HTMLElement {
     li.append(keySample(i), el('span', 'inv-key-text', line));
     ul.append(li);
   });
+  if (note) ul.append(el('li', 'inv-key-note', note));
   return ul;
 }
 
@@ -942,7 +975,7 @@ function squadHead(key?: IconKey): HTMLElement[] {
   b.setAttribute('aria-expanded', String(key.open));
   b.addEventListener('click', () => key.set(!key.open));
   row.append(heading, b);
-  return [row, iconKeyList(key.open)];
+  return [row, iconKeyList(key.open, key.note)];
 }
 
 /** The tab strip's state and what it calls: `set` puts a tab on show. */
@@ -1014,7 +1047,7 @@ function benchTabs(tabs: BenchTabs): HTMLElement {
  * squad's own.
  */
 function benchPanel(view: InventoryView): HTMLElement {
-  const panel = el('div', 'inv-bench-zone');
+  const panel = el('div', 'inv-bench-zone inv-scroll');
   const picker = el('div', 'inv-bench-picker');
   picker.hidden = true;
   panel.append(picker);
@@ -1128,7 +1161,9 @@ export function facts(it: InventoryItem): HTMLElement[] {
     // Each figure stays whole, so a narrow panel breaks the line at the "·" (ID-166).
     const line = el('p', 'inv-power');
     line.append(el('span', 'inv-power-part', it.power));
-    if (it.powerWith) line.append(' · ', el('span', 'inv-power-part', it.powerWith));
+    // The "·" is its own span: the phone shell stacks the two figures and drops it.
+    if (it.powerWith)
+      line.append(el('span', 'inv-power-sep', ' · '), el('span', 'inv-power-part', it.powerWith));
     out.push(line);
   }
   return out;
@@ -1523,7 +1558,12 @@ export function detailsPanel(
   const c = combine ? combineBlock(it, combine.rows, combine.ui) : null;
   // A confirm shows what goes and what comes in place of the gun's own lines.
   if (c?.confirm) info.append(c.confirm);
-  else info.append(...facts(it), el('p', 'menu-note inv-where', it.where));
+  else {
+    // "Held by Ana." is said again by the dock's own heading: the phone shell keeps one.
+    const where = el('p', 'menu-note inv-where', it.where);
+    if (it.where.startsWith('Held by')) where.dataset.held = 'true';
+    info.append(...facts(it), where);
+  }
   if (c?.note) info.append(el('p', 'menu-note inv-combine-note', c.note));
   if (c) dock.append(c.dock);
   if (salvage) dock.append(salvageBlock(it, salvage));
@@ -1652,6 +1692,8 @@ export function createInventory(
   let tab: BenchTab = 'stash';
   /** The icon key (ID-253): closed by default, kept across redraws and tabs, never saved. */
   let keyOpen = false;
+  /** The phone shell's Filter button (ID-277): its two filters open under the tools row. */
+  let filterOpen = false;
   const scrolls: Record<BenchTab, number> = { stash: 0, bench: 0 };
   let pickingFor: string | null = null;
   let pickingName = '';
@@ -1695,12 +1737,75 @@ export function createInventory(
     status.textContent = text;
   };
   const details = el('div', 'inv-details');
+  // The phone shell (ID-277): the details are on demand. Open, they sit beside the squad and the
+  // stash (862) or in the squad list's place (667); `panel.dataset.details` says so for the CSS.
+  let detailsOpen = false;
+  const phone = (): boolean => isShortTouch(window);
+  const paneX = el('button', 'pane-x', '×');
+  paneX.type = 'button';
+  paneX.hidden = true;
+  paneX.dataset.key = 'pane-close';
+  paneX.setAttribute('aria-label', 'Close details');
+  paneX.addEventListener('click', () => closeDetails());
+  /** Writes `detailsOpen` to the panel and the close button. */
+  function syncDetails(): void {
+    const on = detailsOpen && phone();
+    if (on) panel.dataset.details = 'open';
+    else delete panel.dataset.details;
+    paneX.hidden = !on;
+  }
+  /** Opens the details on the phone; a no-op elsewhere. */
+  function openDetails(): void {
+    if (!phone()) return;
+    detailsOpen = true;
+    syncDetails();
+  }
+  /**
+   * The pane can hide the slot that has the keyboard (the squad list it replaces): the keyboard
+   * goes to its close button, never to the page.
+   */
+  function keepFocus(): void {
+    const b = slotOf(selected);
+    if (detailsOpen && b && !onScreen(b)) paneX.focus({ preventScroll: true });
+  }
+  /** Puts the pane away; the keyboard goes back to the slot (or Select) it came from. */
+  function closeDetails(): void {
+    detailsOpen = false;
+    syncDetails();
+    // The pane held the Select panel: leaving it ends Select.
+    if (picking) {
+      setPicking(false);
+      body.querySelector<HTMLElement>('.inv-select')?.focus({ preventScroll: true });
+      return;
+    }
+    slotOf(selected)?.focus({ preventScroll: true });
+  }
+  let unwatch: (() => void) | null = null;
   details.setAttribute('role', 'region');
   // No live region: the focused slot's label already says what it is; the Combine
   // result line is its own status.
   details.setAttribute('aria-label', 'Details');
-  panel.append(body, details);
+  panel.append(body, details, paneX);
   pane.append(panel);
+
+  /** The boxes the phone shell scrolls on their own (squad, stash, bench); the body off the shell. */
+  // The stash's own list is what scrolls in its section (the head and tools stay), the others scroll whole.
+  const scrollers = (): HTMLElement[] =>
+    [...body.children].flatMap((c) => {
+      if (!(c instanceof HTMLElement) || !c.classList.contains('inv-scroll')) return [];
+      return c.classList.contains('inv-stash-zone')
+        ? [c.querySelector<HTMLElement>('.inv-stash, .inv-no-match')].filter(
+            (n): n is HTMLElement => n !== null,
+          )
+        : [c];
+    });
+  const zoneOf = (s: HTMLElement): string =>
+    s.closest('.inv-squad-zone')
+      ? 'squad'
+      : (s.closest<HTMLElement>('[data-panel]')?.dataset.panel ?? 'stash');
+  /** What scrolls the tab `t`: its own box on the phone shell, else the body. */
+  const scrollOf = (t: BenchTab): HTMLElement =>
+    (phone() ? scrollers().find((s) => zoneOf(s) === t) : null) ?? body;
 
   // The hidden tab's slots are out of reach: no arrow, focus or drop goes to them.
   const slots = (): HTMLButtonElement[] =>
@@ -1716,7 +1821,7 @@ export function createInventory(
 
   // The grid: one Tab stop; arrows, Home and End move through every slot.
   body.addEventListener('keydown', (e) => {
-    const all = slots();
+    const all = slots().filter(onScreen);
     const i = all.indexOf(doc.activeElement as HTMLButtonElement);
     if (i < 0) return;
     let next: number;
@@ -1729,7 +1834,10 @@ export function createInventory(
     else return;
     e.preventDefault();
     const to = all[next];
-    if (to) select(to.dataset.key!, true);
+    if (!to) return;
+    openDetails();
+    select(to.dataset.key!, true);
+    keepFocus();
   });
 
   /** The slot above or below `all[i]`: nearest across in the next row up or down. */
@@ -1769,6 +1877,12 @@ export function createInventory(
       (body.querySelector<HTMLElement>('.inv-buy') ?? slotOf(selected))?.focus();
       return;
     }
+    if (e.target instanceof Element && e.target.closest('.inv-filter-toggle')) {
+      filterOpen = !filterOpen;
+      redraw();
+      body.querySelector<HTMLElement>('.inv-filter-toggle')?.focus({ preventScroll: true });
+      return;
+    }
     if (e.target instanceof Element && e.target.closest('.inv-select')) {
       setPicking(!picking);
       body.querySelector<HTMLElement>('.inv-select')?.focus({ preventScroll: true });
@@ -1783,7 +1897,16 @@ export function createInventory(
     const b =
       e.target instanceof Element ? e.target.closest<HTMLElement>('.inv-slot[data-key]') : null;
     if (b && picking) tick(b.dataset.key!);
-    else if (b) select(b.dataset.key!, true);
+    else if (b) {
+      // On the phone the gun shown is tapped again to put its details away.
+      if (phone() && detailsOpen && b.dataset.key === selected) {
+        closeDetails();
+        return;
+      }
+      openDetails();
+      select(b.dataset.key!, true);
+      keepFocus();
+    }
   });
 
   /** Select on or off (ID-215): either way nothing is ticked, and no confirm stays up. */
@@ -1796,6 +1919,9 @@ export function createInventory(
     hovered = null;
     say('');
     redraw();
+    // The Select panel (the count and the quick picks) is the details: on with Select, off with it.
+    detailsOpen = picking && phone();
+    syncDetails();
   }
 
   /** Ticks or unticks slot `key` (ID-215); a gun in hand or a non-gun says why not. */
@@ -2005,6 +2131,11 @@ export function createInventory(
     const it = items().find((i) => i.key === press!.key);
     if (!it) return;
     select(press.key, false);
+    // The squad list is the drop place: a pane standing in its place goes while a gun is carried.
+    if (detailsOpen) {
+      detailsOpen = false;
+      syncDetails();
+    }
     const ghost = el('div', 'inv-slot inv-ghost');
     ghost.dataset.rarity = it.rarity;
     // On touch it rides above the finger, so the finger hides neither it nor the target.
@@ -2042,15 +2173,24 @@ export function createInventory(
    */
   function edgeScroll(): void {
     if (!press?.ghost) return;
-    const r = body.getBoundingClientRect();
+    // The phone shell scrolls the squad and the stash apart: the box under the pointer is the one.
+    const { x, y } = press;
+    const own = phone()
+      ? scrollers().find((s) => {
+          const b = s.getBoundingClientRect();
+          return b.height > 0 && x >= b.left && x <= b.right && y >= b.top && y <= b.bottom;
+        })
+      : undefined;
+    const box = own ?? body;
+    const r = box.getBoundingClientRect();
     if (r.height === 0) return;
     const into =
       press.y < r.top + EDGE ? press.y - r.top - EDGE : Math.max(0, press.y - r.bottom + EDGE);
     if (into === 0) return;
     const step = Math.sign(into) * Math.min(EDGE_SPEED, Math.max(2, Math.abs(into) / 3));
-    const was = body.scrollTop;
-    body.scrollTop = was + step;
-    if (body.scrollTop !== was) follow(press.x, press.y);
+    const was = box.scrollTop;
+    box.scrollTop = was + step;
+    if (box.scrollTop !== was) follow(press.x, press.y);
   }
 
   /** Moves the gun to the pointer, and marks the place under it. */
@@ -2393,7 +2533,12 @@ export function createInventory(
       }
     }
     // Select (ID-215) ends with an empty stash; only guns the grid shows stay ticked.
-    if (view.stash.length === 0) picking = false;
+    if (view.stash.length === 0 && picking) {
+      picking = false;
+      // The pane held the Select panel: it goes with Select.
+      detailsOpen = false;
+      syncDetails();
+    }
     const can = new Set(tickable(view).map((it) => it.key));
     for (const k of [...ticked]) if (!picking || !can.has(k)) ticked.delete(k);
     // On a touch screen a plain drag scrolls: the note says to hold first.
@@ -2410,6 +2555,7 @@ export function createInventory(
     // The list keeps its scroll through the redraw (ID-214): a salvage, combine, upgrade or
     // equip never sends it back to the top.
     const top = body.scrollTop;
+    const tops = new Map(scrollers().map((s) => [zoneOf(s), s.scrollTop]));
     // While ticking, no slot is marked ready to combine or picked up.
     body.replaceChildren(
       ...inventoryGrid(
@@ -2421,6 +2567,8 @@ export function createInventory(
         { tab, set: setTab },
         {
           open: keyOpen,
+          // The phone shell shows no help line under the stash tools: its words are in the key.
+          ...(phone() ? { note } : {}),
           set: (open) => {
             keyOpen = open;
             redraw();
@@ -2428,10 +2576,12 @@ export function createInventory(
             body.querySelector<HTMLElement>('.inv-key-toggle')?.focus({ preventScroll: true });
           },
         },
+        phone() ? { open: filterOpen } : undefined,
       ),
     );
     drawPicker();
     body.scrollTop = top;
+    for (const s of scrollers()) s.scrollTop = tops.get(zoneOf(s)) ?? 0;
     const keys = items().map((x) => x.key);
     const left = selected !== null && !game.armoury.some((w) => `stash:${w.uid}` === selected);
     if (selected === null || !keys.includes(selected)) {
@@ -2511,7 +2661,7 @@ export function createInventory(
     if (!view || next === tab || (next === 'bench' && !benchShown(view))) return;
     // Select (ID-215) is the stash's: the Bench tab ends it.
     if (next === 'bench' && picking) setPicking(false);
-    scrolls[tab] = body.scrollTop;
+    scrolls[tab] = scrollOf(tab).scrollTop;
     tab = next;
     pickingFor = null;
     pickedTile = null;
@@ -2533,7 +2683,7 @@ export function createInventory(
     drawPicker();
     markSelected();
     drawDetails();
-    body.scrollTop = scrolls[next];
+    scrollOf(next).scrollTop = scrolls[next];
   }
 
   /** Opens the gun picker for bench survivor `id` (ID-242), in the Bench tab. */
@@ -2545,6 +2695,8 @@ export function createInventory(
     pickedTile = null;
     drawPicker();
     drawDetails();
+    // Its Equip is in the details: they open with it.
+    openDetails();
     const box = body.querySelector<HTMLElement>('.inv-bench-picker');
     // On the first gun (Back when there is none), so the keyboard is in the picker.
     (
@@ -2718,6 +2870,17 @@ export function createInventory(
       scrolls.stash = scrolls.bench = 0;
       pickingFor = null;
       pickedTile = null;
+      // Every visit on the phone starts with the details put away, and follows the phone turned.
+      detailsOpen = false;
+      filterOpen = false;
+      syncDetails();
+      unwatch?.();
+      unwatch = watchShortTouch(window, () => {
+        detailsOpen = false;
+        syncDetails();
+        // The Filter button and the help line in the key are drawn on the phone only.
+        redraw();
+      });
       say('');
       // On the gun asked for (ID-209) when it is in the stash, else the strongest.
       const want =
@@ -2731,18 +2894,25 @@ export function createInventory(
       // without scrolling to it, unless that leaves it out of sight or cut off below; then
       // its section's heading goes to the top, never a slot cut in half.
       body.scrollTop = 0;
+      for (const s of scrollers()) s.scrollTop = 0;
       const slot = slotOf(selected);
       slot?.focus({ preventScroll: true });
       const head = slot?.closest('section')?.firstElementChild;
+      // On the phone shell the slot's own box scrolls (the squad list or the stash), not the body.
+      const box = (phone() ? slot?.closest<HTMLElement>('.inv-stash, .inv-scroll') : null) ?? body;
       if (
         slot &&
         head &&
-        slot.getBoundingClientRect().bottom > body.getBoundingClientRect().bottom
+        slot.getBoundingClientRect().bottom > box.getBoundingClientRect().bottom
       ) {
-        body.scrollTop = head.getBoundingClientRect().top - body.getBoundingClientRect().top;
+        box.scrollTop = head.getBoundingClientRect().top - box.getBoundingClientRect().top;
       }
+      // Asked for by gun: its details are open.
+      if (want !== null) openDetails();
     },
     hide() {
+      unwatch?.();
+      unwatch = null;
       opened = false;
       stopDrag();
     },
@@ -2763,9 +2933,23 @@ export function createInventory(
         body.querySelector<HTMLElement>('.inv-select')?.focus({ preventScroll: true });
         return true;
       }
-      if (!confirming) return false;
-      cancel();
-      return true;
+      if (confirming) {
+        cancel();
+        return true;
+      }
+      // The Filter popover goes before the pane does.
+      if (filterOpen) {
+        filterOpen = false;
+        redraw();
+        body.querySelector<HTMLElement>('.inv-filter-toggle')?.focus({ preventScroll: true });
+        return true;
+      }
+      // Last, the phone's pane: the next Esc closes the sheet.
+      if (phone() && detailsOpen) {
+        closeDetails();
+        return true;
+      }
+      return false;
     },
   });
 

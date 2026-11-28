@@ -57,6 +57,13 @@ function mount() {
 beforeEach(() => {
   shell = false;
   listeners = new Set();
+  // jsdom lays nothing out: every control has a box, but one inside `data-nobox` (a CSS-hidden
+  // pane, in the browser) has none.
+  vi.spyOn(HTMLElement.prototype, 'getClientRects').mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return (this.closest('[data-nobox]') ? [] : [{}]) as unknown as DOMRectList;
+  });
   vi.stubGlobal('matchMedia', (q: string) => ({
     matches: shell && q === SHORT_TOUCH,
     addEventListener: (_t: string, cb: () => void) => listeners.add(cb),
@@ -64,6 +71,7 @@ beforeEach(() => {
   }));
 });
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   document.body.replaceChildren();
 });
@@ -133,6 +141,59 @@ describe('the camp window as a sheet (ID-276)', () => {
     expect(e.defaultPrevented).toBe(true);
     expect(document.activeElement).toBe(stops[0]);
     expect(buttons.roster).toBeDefined();
+  });
+
+  it('on the shell Tab skips a control the CSS leaves with no box (ID-277); off it every stop stays', () => {
+    const { win } = mount();
+    win.open('weapons');
+    const panel = win.dialog.querySelector<HTMLElement>('#camp-panel-weapons')!;
+    const mk = (label: string, nobox = false): HTMLButtonElement => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      if (nobox) b.dataset.nobox = 'true';
+      panel.append(b);
+      return b;
+    };
+    mk('a');
+    const last = mk('c');
+    // After everything else in the dialog: the last stop wherever it counts.
+    const boxless = document.createElement('button');
+    boxless.dataset.nobox = 'true';
+    win.dialog.append(boxless);
+    const tab = (from: HTMLElement) => {
+      from.focus();
+      return new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    };
+    // Off the shell nothing changes: the boxless control is the last stop, so Tab from it wraps
+    // and Tab from the Close before it is left to the browser.
+    const done = win.dialog.querySelector<HTMLElement>('.camp-done')!;
+    let e = tab(boxless);
+    boxless.dispatchEvent(e);
+    expect(e.defaultPrevented).toBe(true);
+    e = tab(done);
+    done.dispatchEvent(e);
+    expect(e.defaultPrevented).toBe(false);
+    // On it the boxless control is no stop: the last one is the panel's, and Tab from it wraps.
+    turn(true);
+    e = tab(last);
+    last.dispatchEvent(e);
+    expect(e.defaultPrevented).toBe(true);
+    expect(document.activeElement).not.toBe(boxless);
+    // Shift+Tab from the first stop wraps to the last real one, never the boxless.
+    const strip = [...win.dialog.querySelectorAll<HTMLElement>('[role="tab"]')].filter(
+      (b) => !b.hidden && b.tabIndex >= 0,
+    );
+    const head = strip[0]!;
+    head.focus();
+    const back = new KeyboardEvent('keydown', {
+      key: 'Tab',
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    head.dispatchEvent(back);
+    expect(back.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(last);
   });
 
   it('leaving the shell restores everything; coming back hides it again', () => {

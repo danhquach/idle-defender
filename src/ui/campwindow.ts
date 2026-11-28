@@ -61,6 +61,36 @@ export function shortLabel(button: HTMLElement, lead: string, tail: string): voi
   button.setAttribute('aria-label', `${lead}${tail}`);
 }
 
+/**
+ * Whether a control is really on the screen. Only the phone shell lays boxes out by CSS alone (a
+ * Roster pane that replaces the squad, a Weapons pane that replaces the squad list), so only
+ * there is a control with no box or a hidden one out of reach; off the shell this is always
+ * true, so desktop and iPad keep every stop they had (ID-277).
+ */
+export function onScreen(n: HTMLElement): boolean {
+  if (!isShortTouch(window)) return true;
+  return n.getClientRects().length > 0 && getComputedStyle(n).visibility !== 'hidden';
+}
+
+/**
+ * A slot offer's words with the ones a narrow sheet can lose in their own spans (`camp-long`-like,
+ * `inv-buy-long`): "+10 slots · 150 Scrap" is "+10 · 150" there. The text reads whole either way.
+ */
+export function shortOffer(text: string): (string | HTMLElement)[] {
+  const m = /^(\+\d+)( slots?)( · )(.*?)( Scrap)$/.exec(text);
+  if (!m) return [text];
+  // One inline span: the flex button around it lays out one item, so no gap splits the words.
+  const whole = el('span', 'inv-buy-text');
+  whole.append(
+    m[1]!,
+    el('span', 'inv-buy-long', m[2]),
+    m[3]!,
+    m[4]!,
+    el('span', 'inv-buy-long', m[5]),
+  );
+  return [whole];
+}
+
 /** The tabs left to right, whichever is added first; one not listed goes last. */
 const ORDER = ['roster', 'weapons', 'craft', 'map'];
 const place = (id: string): number => (ORDER.indexOf(id) + ORDER.length + 1) % (ORDER.length + 1);
@@ -153,7 +183,8 @@ export function createCampWindow(root: HTMLElement): CampWindow {
       (n) =>
         (n.tabIndex >= 0 || n === at) &&
         !(n as HTMLButtonElement).disabled &&
-        !n.closest('[hidden]'),
+        !n.closest('[hidden]') &&
+        onScreen(n),
     );
   }
 

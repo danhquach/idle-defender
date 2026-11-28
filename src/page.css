@@ -9325,6 +9325,585 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   .hud-debrief .hud-result-scroll[data-more]::after {
     background: linear-gradient(to bottom, transparent, var(--color-panel-solid) 40%);
   }
+
+  /* --- Roster and Weapons use the whole sheet (ID-277). Roster: one row of cards (the squad's
+     never wraps), the details in a 260 px pane beside them, or where the cards are on a narrow
+     sheet (under 700 px, the swap). Weapons: the squad list, the stash and the details side by
+     side, each scrolling on its own; the pane is a 240 px column, or takes the squad list's
+     place (667 and 640), the stash never moving. The close "x" is one look in both tabs: a 44 px
+     box, shown only while a pane is open (the attribute, set by the script). --- */
+  .pane-x:not([hidden]) {
+    display: block;
+    flex: none;
+    box-sizing: border-box;
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+    padding: 0;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font: inherit;
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .pane-x:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+
+  /* Roster: the cards are in boxes no longer, the controls are 44 px, and with no pane the
+     Details box is not there at all (a card opens it). */
+  .camp-scrim .roster-dialog {
+    gap: var(--space-4);
+    padding: var(--space-4) var(--space-8) var(--space-8);
+  }
+
+  .camp-scrim .roster-dialog .rv-box:not(.rv-box-details) {
+    padding: 0;
+    border: 0;
+    background: none;
+  }
+
+  .camp-scrim .roster-dialog:not([data-details]) > .rv-box-details,
+  .camp-scrim .rv-box-details > .rv-fold {
+    display: none;
+  }
+
+  /* The controls are 44 px; the fold headers (Bench, a patrol) are whole-row 44 px taps. */
+  .camp-scrim .rv-btn,
+  .camp-scrim .rv-auto,
+  .camp-scrim .rv-fold {
+    min-height: 44px;
+  }
+
+  /* The squad's controls (the count, the slot to buy, Best squad, Auto) are in the sheet header
+     beside "Best gun" (the script moves them there): one row of 44 px controls, 8 px apart. In a
+     fight the greyed buttons' reason is in their names. */
+  .camp-scrim .camp-tools {
+    flex-wrap: nowrap;
+  }
+
+  .camp-scrim .camp-tools > .rv-squad-row {
+    display: contents;
+  }
+
+  .camp-scrim .camp-tools .rv-tabs-label {
+    display: flex;
+    flex: none;
+    gap: var(--space-4);
+    align-items: center;
+    height: 44px;
+    margin: 0;
+    padding: 0;
+    white-space: nowrap;
+  }
+
+  .camp-scrim .camp-tools .rv-squad-wait {
+    display: none;
+  }
+
+  .camp-scrim .camp-tools .rv-btn,
+  .camp-scrim .camp-tools .rv-auto {
+    flex: none;
+  }
+
+  /* A gun's DPS line wraps by words, never cut. */
+  .camp-scrim .rv-slot-line {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    line-height: 1.2;
+  }
+
+  /* One row of cards, at most 124 px each and the row hugging the left: six share what the
+     sheet gives, a squad of eight a little less each; never a second row. */
+  .camp-scrim .roster-dialog .rv-tabs:not(.rv-bench) {
+    grid-auto-flow: column;
+    grid-template-columns: none;
+    grid-auto-columns: minmax(0, 124px);
+    gap: var(--space-4);
+    padding: 0 var(--space-6) 0 0;
+  }
+
+  .camp-scrim .roster-dialog .rv-bench:not(.rv-patrol) {
+    grid-template-columns: repeat(auto-fill, minmax(104px, 124px));
+    gap: var(--space-4);
+    padding: 0 var(--space-6) 0 0;
+  }
+
+  .camp-scrim .roster-dialog .rv-tab .roster-avatar-xs {
+    width: min(100%, 40px);
+  }
+
+  /* The pane open: a grid of the boxes (one column) and the pane (260 px), the pane's own row
+     the last, stretching, so it never lengthens the rows of the boxes. It sticks to the top and
+     scrolls on its own inside what the sheet leaves. */
+  .camp-scrim .roster-dialog[data-details='open']:not([hidden]) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 260px;
+    grid-template-rows: repeat(3, auto) 1fr;
+    align-content: start;
+    gap: 0 var(--space-8);
+  }
+
+  .camp-scrim .roster-dialog[data-details='open'] > .rv-box:not(.rv-box-details) {
+    grid-column: 1;
+    min-width: 0;
+    margin-bottom: var(--space-4);
+  }
+
+  .camp-scrim .roster-dialog[data-details='open'] > .rv-box-details {
+    grid-column: 2;
+    grid-row: 1 / -1;
+    position: sticky;
+    top: 0;
+    align-self: start;
+    min-width: 0;
+    max-height: calc(100dvh - 64px);
+    container-type: inline-size;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  /* The x sits at the top right of the name (or the picker's title) row, which wraps beside it:
+     it takes no row of its own (the negative margin), and sticks while the pane scrolls. */
+  .camp-scrim .rv-box-details > .pane-x:not([hidden]) {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    align-self: flex-end;
+    margin-bottom: -44px;
+  }
+
+  .camp-scrim .rv-box-details .rv-who-head,
+  .camp-scrim .rv-box-details .rv-phead {
+    padding-right: 48px;
+  }
+
+  /* In the pane the gun slot comes straight under the name, level and XP (with the portrait
+     beside them), the buttons after it: the gun row, its DPS in full, shows at the pane's first
+     scroll position. */
+  .camp-scrim .rv-box-details .rv-top {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      'pic head'
+      'pic sub'
+      'pic xp'
+      'slot slot'
+      'act act';
+  }
+
+  .camp-scrim .rv-box-details .rv-who-text {
+    display: contents;
+  }
+
+  .camp-scrim .rv-box-details .rv-who-head {
+    grid-area: head;
+  }
+
+  .camp-scrim .rv-box-details .rv-who-level {
+    grid-area: sub;
+  }
+
+  .camp-scrim .rv-box-details .rv-xprow {
+    grid-area: xp;
+  }
+
+  .camp-scrim .rv-box-details .rv-actions {
+    grid-area: act;
+  }
+
+  /* With the pane open the cards are compact (portrait, short name, level): the pane has the
+     rest. Six fit a row beside it (about 75 px each). */
+  .camp-scrim .roster-dialog[data-details='open'] .rv-tab {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    min-height: 44px;
+    text-align: center;
+  }
+
+  .camp-scrim .roster-dialog[data-details='open'] .rv-tab .roster-avatar-xs {
+    width: min(100%, 32px);
+  }
+
+  .camp-scrim .roster-dialog[data-details='open'] .rv-tab-text {
+    align-items: center;
+  }
+
+  .camp-scrim .roster-dialog[data-details='open'] .rv-tab-job,
+  .camp-scrim .roster-dialog[data-details='open'] .rv-tab-gun,
+  .camp-scrim .roster-dialog[data-details='open'] .rv-tab-stat {
+    display: none;
+  }
+
+  .camp-scrim .roster-dialog[data-details='open'] .rv-bench:not(.rv-patrol) {
+    grid-template-columns: repeat(auto-fill, minmax(70px, 124px));
+  }
+
+  .camp-scrim .roster-dialog[data-details='open'] .rv-patrol {
+    grid-auto-columns: 78px;
+  }
+
+  /* The gun picker starts at the pane's top: the survivor row (the picker's own head has "Stats"
+     to go back) steps aside while it shows. */
+  .camp-scrim .rv-box-details:has(.rv-phead) .rv-top {
+    display: none;
+  }
+
+  /* Under 700 px the pane is the swap: it takes the sheet's width and the boxes go (Esc, the x
+     or the card's own tap brings them back). */
+  @container (max-width: 699px) {
+    .camp-scrim .roster-dialog[data-details='open']:not([hidden]) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .camp-scrim .roster-dialog[data-details='open'] > .rv-box:not(.rv-box-details) {
+      display: none;
+    }
+
+    .camp-scrim .roster-dialog[data-details='open'] > .rv-box-details {
+      grid-column: 1;
+      position: static;
+      max-height: none;
+      overflow: visible;
+    }
+  }
+
+  /* Roster and Weapons are the sheet's whole height (the empty sheet below the content, never the
+     screen showing through); Weapons' squad and stash have a box to scroll in. */
+  .camp-scrim .camp-dialog[data-tab='roster'],
+  .camp-scrim .camp-dialog[data-tab='weapons'] {
+    height: 100%;
+  }
+
+  /* Three columns (the squad list 160 px, the stash, the details 240 px), two rows (the Stash /
+     Bench strip, then the lists). The body steps aside (contents), so its parts are the grid's. */
+  .camp-scrim .inv-panel {
+    position: relative;
+    display: grid;
+    grid-template-columns: 160px minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: var(--space-4) var(--space-8);
+    padding: 0 var(--space-8) var(--space-8);
+  }
+
+  .camp-scrim .inv-panel[data-details='open'] {
+    grid-template-columns: 160px minmax(0, 1fr) 240px;
+  }
+
+  .camp-scrim .inv-body {
+    display: contents;
+  }
+
+  .camp-scrim .inv-body > .menu-section {
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .camp-scrim .inv-body > .inv-scroll {
+    min-height: 0;
+    padding-right: var(--space-4);
+    padding-bottom: var(--space-8);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .camp-scrim .inv-body > .inv-squad-zone {
+    grid-column: 1;
+    grid-row: 1 / -1;
+  }
+
+  /* The Stash / Bench tabs and the stash's head share row 1: the tabs over the left of the
+     section, the head (the count, the slots to buy at the right) after them. */
+  .camp-scrim .inv-body > .inv-tabs {
+    display: flex;
+    grid-column: 2;
+    grid-row: 1;
+    z-index: 1;
+    align-self: start;
+    gap: var(--space-4);
+    width: 136px;
+    padding: 0;
+  }
+
+  .camp-scrim .inv-tab {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 44px;
+    padding: 0 var(--space-4);
+  }
+
+  /* The stash is a column: the head and the tools stay, its list scrolls. */
+  .camp-scrim .inv-body > .inv-stash-zone {
+    grid-column: 2;
+    grid-row: 1 / -1;
+    gap: var(--space-4);
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .camp-scrim .inv-body > .inv-bench-zone {
+    grid-column: 2;
+    grid-row: 2 / -1;
+  }
+
+  .camp-scrim .inv-stash-zone > .inv-stash,
+  .camp-scrim .inv-stash-zone > .inv-no-match {
+    flex: 1 1 0;
+    min-height: 0;
+    padding-bottom: var(--space-8);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    align-content: start;
+  }
+
+  /* No help line under the tools: its words are in the squad's ⓘ key. */
+  .camp-scrim .inv-stash-zone > .inv-note {
+    display: none;
+  }
+
+  .camp-scrim .inv-stash-zone > .inv-stash-heading,
+  .camp-scrim .inv-stash-zone > .inv-stash-head {
+    display: flex;
+    flex: none;
+    flex-wrap: nowrap;
+    align-items: center;
+    min-height: 44px;
+    margin: 0;
+    font-size: var(--text-sm);
+  }
+
+  .camp-scrim .inv-stash-head .inv-stash-heading {
+    margin: 0;
+    font-size: var(--text-sm);
+  }
+
+  .camp-scrim .inv-panel:has(.inv-tabs) .inv-stash-zone > .inv-stash-heading,
+  .camp-scrim .inv-panel:has(.inv-tabs) .inv-stash-zone > .inv-stash-head {
+    margin-left: 140px;
+  }
+
+  /* The word is for the eye only: the heading still reads "Stash 30/40" (the .sr-only pattern). */
+  .camp-scrim .inv-panel:has(.inv-tabs) .inv-stash-word {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .camp-scrim .inv-stash-head .inv-buy {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    min-height: 44px;
+    margin-left: auto;
+    padding: 0 var(--space-8);
+    white-space: nowrap;
+  }
+
+  /* The sort, the two filters and Select stay on one row, each as wide as the row allows. */
+  .camp-scrim .inv-stash-tools {
+    flex: none;
+    flex-wrap: nowrap;
+    gap: var(--space-4);
+  }
+
+  .camp-scrim .inv-stash-tools .inv-pick {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 44px;
+    padding: 0 var(--space-4);
+    font-size: 11px;
+  }
+
+  .camp-scrim .inv-stash-tools .inv-select {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 0 var(--space-8);
+    font-size: 11px;
+  }
+
+  /* The squad's power: small, up to two lines, its band inline after the numbers. Nothing in the
+     squad column shrinks (a note with overflow hidden would be squeezed to nothing in a scroller). */
+  .camp-scrim .inv-squad-zone > * {
+    flex: none;
+  }
+
+  .camp-scrim .inv-squad-zone .inv-power-line {
+    display: block;
+    margin: 0;
+    font-size: 10px;
+    line-height: 1.3;
+  }
+
+  .camp-scrim .inv-squad-zone .inv-power-band {
+    padding: 0 var(--space-4);
+    font-size: 9px;
+    white-space: nowrap;
+  }
+
+  .camp-scrim .inv-key-note {
+    grid-column: 1 / -1;
+  }
+
+  /* The dock's heading ("Held by Ana") says it: the plain line above it is left out. */
+  .camp-scrim .inv-where[data-held] {
+    display: none;
+  }
+
+  /* The Filter button stands in for the type and rarity menus where the stash is narrow (a
+     sheet under 560 px: 640 and 641 alike); they open under the row, half a row wide each. */
+  .camp-scrim .inv-stash-tools {
+    position: relative;
+  }
+
+  .camp-scrim .inv-stash-tools .inv-filter-toggle {
+    display: none;
+  }
+
+  @container (max-width: 559px) {
+    .camp-scrim .inv-stash-tools .inv-filter-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: none;
+      min-height: 44px;
+      padding: 0 var(--space-8);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .camp-scrim .inv-stash-tools .inv-pick[data-pick='type'],
+    .camp-scrim .inv-stash-tools .inv-pick[data-pick='rarity'] {
+      display: none;
+    }
+
+    .camp-scrim .inv-stash-tools[data-filter='open'] .inv-pick[data-pick='type'],
+    .camp-scrim .inv-stash-tools[data-filter='open'] .inv-pick[data-pick='rarity'] {
+      display: block;
+      position: absolute;
+      top: 100%;
+      z-index: 3;
+      width: calc(50% - 2px);
+      margin-top: var(--space-4);
+    }
+
+    .camp-scrim .inv-stash-tools[data-filter='open'] .inv-pick[data-pick='type'] {
+      left: 0;
+    }
+
+    .camp-scrim .inv-stash-tools[data-filter='open'] .inv-pick[data-pick='rarity'] {
+      left: calc(50% + 2px);
+    }
+
+    /* The Roster header's "+1 slot · 500 Scrap" is "+1 · 500" (the words stay in the name). */
+    .camp-scrim .camp-tools .inv-buy-long {
+      display: none;
+    }
+  }
+
+  /* The stash's own width decides its slots button: "+10 slots · 150 Scrap" is "+10 · 150"
+     whenever the tabs, the count and the full label do not fit its column (342 px at 862 with a
+     gun open, 315 at 667, 288 at 640); the whole words are in the button's name. */
+  .camp-scrim .inv-stash-zone {
+    container-type: inline-size;
+  }
+
+  @container (max-width: 359px) {
+    .camp-scrim .inv-stash-zone .inv-buy-long {
+      display: none;
+    }
+  }
+
+  /* The details: not there until a gun is asked for; then the third column, the DPS line at
+     its top, the pane's x at the top right of the name, which wraps beside it. */
+  .camp-scrim .inv-panel > .inv-details {
+    display: none;
+  }
+
+  .camp-scrim .inv-panel[data-details='open'] > .inv-details {
+    display: flex;
+    grid-column: 3;
+    grid-row: 1 / -1;
+    width: auto;
+    height: auto;
+    min-height: 0;
+    border-top: 0;
+    border-left: 1px solid var(--color-divider);
+  }
+
+  .camp-scrim .inv-panel > .pane-x:not([hidden]) {
+    grid-column: 3;
+    grid-row: 1 / -1;
+    z-index: 2;
+    align-self: start;
+    justify-self: end;
+  }
+
+  .camp-scrim .inv-details-info {
+    min-height: 1lh;
+    padding: var(--space-8) var(--space-10);
+  }
+
+  .camp-scrim .inv-details-info > :first-child {
+    padding-right: 48px;
+  }
+
+  .camp-scrim .inv-details-info .inv-name {
+    order: -2;
+  }
+
+  .camp-scrim .inv-details-info .inv-power {
+    display: flex;
+    flex-direction: column;
+    order: -1;
+  }
+
+  /* The two figures on two lines, each wrapping by words: no "·" between them. */
+  .camp-scrim .inv-power-sep {
+    display: none;
+  }
+
+  .camp-scrim .inv-power-part {
+    white-space: normal;
+  }
+
+  .camp-scrim .inv-key-toggle {
+    flex-basis: 44px;
+    width: 44px;
+    height: 44px;
+  }
+
+  /* Under 700 px (667, 640) the left column is 240 px: the squad list in it, or, with the pane
+     open, the details in the squad list's place. The stash keeps its column. */
+  @container (max-width: 699px) {
+    .camp-scrim .inv-panel,
+    .camp-scrim .inv-panel[data-details='open'] {
+      grid-template-columns: 240px minmax(0, 1fr);
+    }
+
+    .camp-scrim .inv-panel[data-details='open'] > .inv-details,
+    .camp-scrim .inv-panel[data-details='open'] > .pane-x:not([hidden]) {
+      grid-column: 1;
+    }
+
+    .camp-scrim .inv-panel[data-details='open'] > .inv-details {
+      border-left: 0;
+    }
+
+    .camp-scrim .inv-panel[data-details='open'] .inv-squad-zone {
+      display: none;
+    }
+  }
 }
 
 /* The Craft tab (ID-209), third in the camp window: dense and content-sized. The blueprint list
