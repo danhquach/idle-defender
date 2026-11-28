@@ -67,8 +67,9 @@ const GOLDEN: Record<string, string> = {
  * (re-taken in ID-236), the same code path that matches main above byte for byte on Node 25.
  */
 const NODE_22: Record<string, string> = {
-  // ID-285: the two ID-287 entries (6a4c509b:43605, 7bdc1b5e:19899) are stale after the offer reshuffle;
-  // to be taken from the branch on CI.
+  // ID-285: taken from the branch on CI after the offer reshuffle's re-record.
+  'h20-L18-lost': '61e5e726:40776',
+  'h20-L40-won': '89bc63f3:19978',
 };
 
 /** Node's major version: picks the digests recorded on that runtime. */

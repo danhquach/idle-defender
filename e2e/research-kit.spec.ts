@@ -440,13 +440,16 @@ async function offerLaidOut(
   await expect(toxin).toContainText('poison');
   const spill = await toxin.evaluate((card) => {
     const r = card.getBoundingClientRect();
+    // Cut off: a box that clips (overflow not visible) holding more than it shows. A glyph taller
+    // than an unclipped line box (the key's line-height 1 on Linux fonts) shows whole, so it is not.
+    const clips = (k: Element): boolean => getComputedStyle(k).overflow !== 'visible';
     return [card, ...card.querySelectorAll<HTMLElement>('*')]
       .filter((k) => {
         const kr = k.getBoundingClientRect();
         return (
           kr.width > 0 &&
-          (k.scrollWidth > k.clientWidth + 1 ||
-            k.scrollHeight > k.clientHeight + 1 ||
+          ((clips(k) &&
+            (k.scrollWidth > k.clientWidth + 1 || k.scrollHeight > k.clientHeight + 1)) ||
             kr.right > r.right + 1 ||
             kr.bottom > r.bottom + 1)
         );
