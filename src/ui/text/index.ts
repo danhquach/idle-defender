@@ -4,3 +4,4 @@ export * from './cards.ts';
 export * from './guns.ts';
 export * from './names.ts';
 export * from './refusals.ts';
+export * from './startkit.ts';

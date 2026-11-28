@@ -1,6 +1,6 @@
 // ID-263: the Research Center's table and buying rules.
 import { describe, expect, it } from 'vitest';
-import { TECH, TECH_BRANCHES, TECH_IDS, type TechId } from './data.ts';
+import { TECH, TECH_BRANCHES, TECH_CARD, TECH_IDS, TECH_TABS, type TechId } from './data.ts';
 import { newGame, type GameState } from './game.ts';
 import {
   cleanTech,
@@ -18,14 +18,70 @@ const withScrap = (scrap: number, tech?: TechId[]): GameState => {
 };
 
 describe('the table', () => {
-  it('has 14 nodes in 4 branches, costing 25,800 in all', () => {
-    expect(TECH_IDS.length).toBe(14);
+  it('has 29 nodes in 9 branches, costing 47,600 in all (ID-284: 14, 25,800 before)', () => {
+    expect(TECH_IDS.length).toBe(29);
     expect(Object.keys(TECH).sort()).toEqual([...TECH_IDS].sort());
-    expect(TECH_BRANCHES).toEqual(['wall', 'wire', 'ammo', 'mortars']);
-    expect(TECH_IDS.reduce((sum, id) => sum + TECH[id].cost, 0)).toBe(25800);
+    expect(TECH_BRANCHES).toEqual([
+      'wall',
+      'wire',
+      'ammo',
+      'mortars',
+      'incendiary',
+      'shock',
+      'frag',
+      'flashbang',
+      'molotov',
+    ]);
+    expect(TECH_IDS.reduce((sum, id) => sum + TECH[id].cost, 0)).toBe(47600);
+    const kit = TECH_IDS.filter((id) => TECH_TABS.kit.includes(TECH[id].branch as never));
+    expect(kit.length).toBe(15);
+    expect(kit.reduce((sum, id) => sum + TECH[id].cost, 0)).toBe(21800);
+    // The first 14 ids keep their place: the order is save format.
+    expect(TECH_IDS.slice(0, 14)[13]).toBe('tar-moat');
     expect(
-      TECH_IDS.filter((id) => TECH[id].tier < 4).reduce((sum, id) => sum + TECH[id].cost, 0),
+      TECH_IDS.filter((id) => TECH[id].tier < 4 && !kit.includes(id)).reduce(
+        (sum, id) => sum + TECH[id].cost,
+        0,
+      ),
     ).toBe(9300);
+  });
+
+  it('gives each of the two tabs its branches, and every branch to one tab', () => {
+    expect(TECH_TABS.upgrades).toEqual(['wall', 'wire', 'ammo', 'mortars']);
+    expect(TECH_TABS.kit).toEqual(['incendiary', 'shock', 'frag', 'flashbang', 'molotov']);
+    expect([...TECH_TABS.upgrades, ...TECH_TABS.kit]).toEqual([...TECH_BRANCHES]);
+  });
+
+  it('an unlock is its card (the node id is the card id) and no card of the pool is gated by it', () => {
+    for (const id of [
+      'incendiary-rounds',
+      'shock-rounds',
+      'frag-grenades',
+      'flashbang',
+      'molotov',
+    ] as const) {
+      expect(TECH[id].tier).toBe(1);
+      expect(TECH[`${id}-mk2`].needs).toEqual([id]);
+      expect(TECH[`${id}-mk3`].needs).toEqual([`${id}-mk2`]);
+      expect(Object.keys(TECH_CARD)).not.toContain(id);
+    }
+    expect(TECH_IDS.slice(14)).toEqual([
+      'incendiary-rounds',
+      'incendiary-rounds-mk2',
+      'incendiary-rounds-mk3',
+      'shock-rounds',
+      'shock-rounds-mk2',
+      'shock-rounds-mk3',
+      'frag-grenades',
+      'frag-grenades-mk2',
+      'frag-grenades-mk3',
+      'flashbang',
+      'flashbang-mk2',
+      'flashbang-mk3',
+      'molotov',
+      'molotov-mk2',
+      'molotov-mk3',
+    ]);
   });
 
   it('puts each prerequisite before its node, one tier below, in the same branch', () => {
@@ -189,8 +245,23 @@ describe('techReady (the top bar’s dot)', () => {
     expect(techReady(withScrap(199))).toBe(false);
     expect(techReady(withScrap(200))).toBe(true);
     expect(techReady(withScrap(1e9, [...TECH_IDS]))).toBe(false);
-    // With every Tier 1 node bought, only Tier 2 is open: 300 (Quick Mortars) is gone, 600 is the least.
-    const tier1: TechId[] = ['reinforced-wall', 'razor-wire', 'hand-loads', 'quick-mortars'];
+    // With every Tier 1 node of the four Upgrades branches and the five unlocks bought, only Tier 2 is
+    // open: 300 (Quick Mortars) is gone, 600 is the least.
+    const tier1: TechId[] = [
+      'reinforced-wall',
+      'razor-wire',
+      'hand-loads',
+      'quick-mortars',
+      'incendiary-rounds',
+      'shock-rounds',
+      'frag-grenades',
+      'flashbang',
+      'molotov',
+    ];
+    // The new unlocks open a node at 500: the dot is lit by them too.
+    expect(
+      techReady(withScrap(500, ['reinforced-wall', 'razor-wire', 'hand-loads', 'quick-mortars'])),
+    ).toBe(true);
     expect(techReady(withScrap(599, tier1))).toBe(false);
     expect(techReady(withScrap(600, tier1))).toBe(true);
   });

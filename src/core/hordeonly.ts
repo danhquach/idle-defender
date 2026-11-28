@@ -33,7 +33,16 @@ import {
   withoutBlueprint,
   blueprintCount,
 } from './craft.ts';
-import { isModeCard, isTechCard, UPGRADE_IDS, UPGRADES, type CardCategory } from './cards.ts';
+import {
+  AMMO_CARDS,
+  grantCard,
+  isModeCard,
+  isTechCard,
+  THROWABLE_CARDS,
+  UPGRADE_IDS,
+  UPGRADES,
+  type CardCategory,
+} from './cards.ts';
 import {
   CARD,
   TECH_CARD,
@@ -99,6 +108,7 @@ import {
   onMapPatrol,
   xpGains,
   type GameState,
+  type Kit,
   type LevelGain,
   type RosterDefender,
 } from './game.ts';
@@ -892,6 +902,9 @@ export function startSquadHorde(
     tech: techOf(game),
   });
   if (mode !== 'normal') s.mode = mode;
+  // The starting pick (ID-284): held at Lv 1 as if it had been the first pick, no RNG drawn.
+  const kit = kitOf(game);
+  for (const id of [kit.ammo, kit.throwable]) if (id !== undefined) grantCard(s, id);
   // Wall Machine Gun (ID-264): its damage a second is a share of the horde's demand rate, fixed
   // here from the horde's HP (by kind, theme included) over the time its waves take. No RNG.
   if (techOf(game).includes('wall-machine-gun')) {
@@ -1194,6 +1207,55 @@ const MODE_UNLOCK_HORDES = [10, 20, 30] as const;
 /** The Tier 4 cards (ID-264) the researched nodes put in the fight's pool, in `TECH_IDS` order. */
 export const techCards = (game: Pick<GameState, 'tech'>): UpgradeId[] =>
   techOf(game).flatMap((id) => (id in TECH_CARD ? [TECH_CARD[id as keyof typeof TECH_CARD]] : []));
+
+/** The two kit slots (ID-284) and the cards each one takes. */
+const KIT_SLOTS = { ammo: AMMO_CARDS, throwable: THROWABLE_CARDS } as const;
+export type KitSlot = keyof typeof KIT_SLOTS;
+
+/** Whether card `id`'s unlock is researched (ID-284): the unlock node's id is the card's. */
+const unlocked = (game: Pick<GameState, 'tech'>, id: UpgradeId): boolean =>
+  (techOf(game) as readonly string[]).includes(id);
+
+/** The cards of `slot` the researched unlocks open (ID-284), in the slot's order. */
+export const kitCards = (game: Pick<GameState, 'tech'>, slot: KitSlot): UpgradeId[] =>
+  KIT_SLOTS[slot].filter((id) => unlocked(game, id));
+
+/**
+ * The starting pick the next fight reads (ID-284): each slot's pick only while its unlock is
+ * researched, so one whose node is gone is none. Empty with no pick.
+ */
+export function kitOf(game: Pick<GameState, 'tech' | 'kit'>): Kit {
+  const out: Kit = {};
+  for (const slot of Object.keys(KIT_SLOTS) as KitSlot[]) {
+    const id = game.kit?.[slot];
+    if (id !== undefined && KIT_SLOTS[slot].includes(id) && unlocked(game, id)) out[slot] = id;
+  }
+  return out;
+}
+
+/**
+ * Sets (or with `null` clears) the card the squad starts `slot` with (ID-284, between hordes). A
+ * card of the other slot, or one whose unlock is not researched, is refused. `kit` is dropped
+ * from the game while it holds no pick.
+ */
+export function pickKit(
+  game: GameState,
+  slot: KitSlot,
+  id: UpgradeId | null,
+): { ok: true; game: GameState } | Refusal {
+  if (id !== null) {
+    if (!Object.hasOwn(KIT_SLOTS, slot) || !KIT_SLOTS[slot].includes(id)) {
+      return { ok: false, code: 'kit-slot' };
+    }
+    if (!unlocked(game, id)) return { ok: false, code: 'kit-locked' };
+  }
+  const next = { ...kitOf(game) };
+  if (id === null) delete next[slot];
+  else next[slot] = id;
+  const rest = { ...game };
+  delete rest.kit;
+  return { ok: true, game: Object.keys(next).length > 0 ? { ...rest, kit: next } : rest };
+}
 
 /**
  * The mode cards the fight being played starts with in its card pool (ID-222): every card of

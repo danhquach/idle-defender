@@ -595,6 +595,10 @@ describe('the Menu', () => {
       expect(items[i]!.textContent).toBe(`${sample}${name} ${text}`);
     });
     expect(help.textContent).toMatch(/Orange with "!"\. A near-max crit: ×3\.25 damage or more/);
+    // ID-284: Hand-loads' first round of a magazine is orange too.
+    expect(help.textContent).toMatch(
+      /or a hand-load \(the first round of a magazine with Hand-loads researched\)/,
+    );
     expect(help.textContent).toMatch(/keeps that colour and its "!"/);
   });
 

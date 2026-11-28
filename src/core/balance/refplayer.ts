@@ -2,7 +2,15 @@
 // they have earned on research owns at a horde, for the balance tests to play with. A balance
 // fixture, never imported by game code. Deterministic, no RNG: the schedule is a closed form of
 // the horde, not a played campaign.
-import { START_STOCK, SQUAD_SLOT_COSTS, STASH_SLOT, TECH, TECH_IDS, type TechId } from '../data.ts';
+import {
+  START_STOCK,
+  SQUAD_SLOT_COSTS,
+  STASH_SLOT,
+  TECH,
+  TECH_IDS,
+  TECH_TABS,
+  type TechId,
+} from '../data.ts';
 import { winScrap } from '../hordeonly.ts';
 import { effHorde, MODE_IDS, MODE_UNLOCK_HORDE, type Mode } from '../modes.ts';
 
@@ -64,8 +72,17 @@ export function refEarned(mode: Mode, n: number): number {
 }
 
 /**
+ * The nodes the reference player may buy (ID-284): those of the four Upgrades branches. It picks
+ * no starting card, so an unlock would do nothing; leaving the 15 ammo and throwable nodes out
+ * keeps its schedule, and every fixture from Normal 38, as it was.
+ */
+export const REF_NODES: readonly TechId[] = TECH_IDS.filter((id) =>
+  (TECH_TABS.upgrades as readonly string[]).includes(TECH[id].branch),
+);
+
+/**
  * The nodes the reference player owns at horde `n` of `mode`: all slot purchases come out of
- * the Scrap earned first, then `share` of what is left buys the cheapest open node again and
+ * the Scrap earned first, then `share` of what is left buys the cheapest open node of `REF_NODES` again and
  * again (ties in `TECH_IDS` order, a node's parents owned first) until the next costs more
  * than is left. In `TECH_IDS` order.
  */
@@ -74,7 +91,7 @@ export function refTech(mode: Mode, n: number, share: number = REF_SHARE): TechI
   const owned = new Set<TechId>();
   for (;;) {
     let best: TechId | undefined;
-    for (const id of TECH_IDS) {
+    for (const id of REF_NODES) {
       if (owned.has(id) || !TECH[id].needs.every((need) => owned.has(need))) continue;
       if (best === undefined || TECH[id].cost < TECH[best].cost) best = id;
     }
@@ -82,5 +99,5 @@ export function refTech(mode: Mode, n: number, share: number = REF_SHARE): TechI
     left -= TECH[best].cost;
     owned.add(best);
   }
-  return TECH_IDS.filter((id) => owned.has(id));
+  return REF_NODES.filter((id) => owned.has(id));
 }

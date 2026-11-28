@@ -23,6 +23,7 @@ import {
   squadAt,
   squadIn,
   wins,
+  withKit,
   withRef,
 } from './shared.ts';
 
@@ -46,6 +47,8 @@ interface Played {
   seed: number;
   bare: boolean;
   researched: boolean;
+  /** ID-284: with every node and a kit picked, Incendiary + Frag Grenades, and Shock + Flashbang, at Mk III. */
+  kitted: [boolean, boolean];
 }
 
 describe('a fully researched tree (ID-263)', () => {
@@ -54,13 +57,28 @@ describe('a fully researched tree (ID-263)', () => {
     for (const [n, level] of CASES) {
       for (const seed of SEEDS) {
         played.push(
-          keep(`${n} ${level} ${seed}`, (): Played => {
+          keep(`${n} ${level} ${seed} kit`, (): Played => {
             const won = (tech: boolean): boolean =>
               playSquadHorde(
                 { ...squadAt(n, level), ...(tech ? { tech: [...TECH_IDS] } : {}) },
                 seed,
               ).outcome === 'won';
-            return { n, level, seed, bare: won(false), researched: won(true) };
+            const kit = (
+              ammo: 'incendiary-rounds' | 'shock-rounds',
+              throwable: 'frag-grenades' | 'flashbang',
+            ): boolean =>
+              playSquadHorde(
+                withKit({ ...squadAt(n, level), tech: [...TECH_IDS] }, ammo, throwable, 2),
+                seed,
+              ).outcome === 'won';
+            return {
+              n,
+              level,
+              seed,
+              bare: won(false),
+              researched: won(true),
+              kitted: [kit('incendiary-rounds', 'frag-grenades'), kit('shock-rounds', 'flashbang')],
+            };
           }),
         );
       }
@@ -71,6 +89,21 @@ describe('a fully researched tree (ID-263)', () => {
     for (const p of played) {
       if (p.bare)
         expect(p.researched, `Horde ${p.n} (level ${p.level}), seed ${p.seed}`).toBe(true);
+    }
+  });
+
+  // ID-284: a researched player who also picked a kit is only stronger.
+  it('loses no horde the bare squad wins with a kit picked either way', () => {
+    for (const p of played) {
+      if (!p.bare) continue;
+      expect(
+        p.kitted[0],
+        `Horde ${p.n} (level ${p.level}), seed ${p.seed}, Incendiary + Frag`,
+      ).toBe(true);
+      expect(
+        p.kitted[1],
+        `Horde ${p.n} (level ${p.level}), seed ${p.seed}, Shock + Flashbang`,
+      ).toBe(true);
     }
   });
 

@@ -47,8 +47,8 @@ function expectClean(value: unknown): TechId[] {
 }
 
 describe('save: Research Center (ID-263)', () => {
-  it('is version 27; a game with nothing researched writes no key, and loads as before', () => {
-    expect(SAVE_VERSION).toBe(27);
+  it('is version 28; a game with nothing researched writes no key, and loads as before', () => {
+    expect(SAVE_VERSION).toBe(28);
     const g = camp();
     expect('tech' in JSON.parse(encodeSave(g, NOW)).game).toBe(false);
     expect(reread(g)!.game).toEqual(g);
@@ -119,8 +119,8 @@ describe('save: Research Center (ID-263)', () => {
     expect(expectClean(lookalikes)).toEqual([]);
   });
 
-  it('junk entries before the valid ids: nothing researched (the size cap, twice the 14 nodes, comes first)', () => {
-    const junk = Array.from({ length: 28 }, (_, i) => 'junk' + i);
+  it('junk entries before the valid ids: nothing researched (the size cap, twice the 29 nodes, comes first)', () => {
+    const junk = Array.from({ length: 58 }, (_, i) => 'junk' + i);
     expect(expectClean([...junk, 'reinforced-wall', 'razor-wire'])).toEqual([]);
     expect(expectClean([...junk.slice(0, 5), 'reinforced-wall'])).toEqual(['reinforced-wall']);
   });
@@ -173,9 +173,9 @@ describe('save: Tier 4 combos (ID-264, no version bump)', () => {
   ];
   const COMBOS: TechId[] = ['wall-machine-gun', 'shock-net', 'tar-moat'];
 
-  it('the version is still 27: an older build reads the new ids as unknown and drops them', () => {
-    expect(SAVE_VERSION).toBe(27);
-    expect(TECH_IDS.length).toBe(14);
+  it('ID-284 bumped the version to 28 and the cap to twice the 29 nodes', () => {
+    expect(SAVE_VERSION).toBe(28);
+    expect(TECH_IDS.length).toBe(29);
   });
 
   it('a combo with both parents loads; a combo alone, or with one parent, is dropped', () => {
@@ -195,7 +195,7 @@ describe('save: Tier 4 combos (ID-264, no version bump)', () => {
 
   it('a combo listed before its parents is kept once they are there (the list is put in table order)', () => {
     const early = ['tar-moat', 'shock-net', 'wall-machine-gun', ...TECH_IDS.slice(0, 11)];
-    expect(expectClean(early)).toEqual([...TECH_IDS]);
+    expect(expectClean(early)).toEqual(TECH_IDS.slice(0, 14));
   });
 
   it('a removed parent takes its combos with it, the others stay', () => {
@@ -248,8 +248,8 @@ describe('save: Tier 4 combos (ID-264, no version bump)', () => {
     ]);
   });
 
-  it('more than 28 entries: the list is cut first, so combos past the cut are lost', () => {
-    const pad = Array.from({ length: 28 }, (_, i) => 'pad' + i);
+  it('more than 58 entries: the list is cut first, so combos past the cut are lost', () => {
+    const pad = Array.from({ length: 58 }, (_, i) => 'pad' + i);
     expect(expectClean([...pad, ...TECH_IDS])).toEqual([]);
     expect(expectClean([...TECH_IDS, ...pad])).toEqual([...TECH_IDS]);
     expect(expectClean(Array.from({ length: 2000 }, () => 'shock-net'))).toEqual([]);

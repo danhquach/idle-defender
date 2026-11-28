@@ -20,7 +20,6 @@ import {
   type TechId,
 } from './data.ts';
 import {
-  ammoBoost,
   cardLevel,
   perkFactor,
   perkScale,
@@ -443,10 +442,6 @@ export function synergyOf(state: HordeState, id: UpgradeId): Synergy | null {
   return null;
 }
 
-/** Heavy Rounds' damage factor, with Hand-loads' share of it added (ID-263). */
-const heavyDamage = (s: Pick<HordeState, 'tech'>): number =>
-  ammoBoost(s) === 1 ? CARD.heavyRounds.damage : 1 + (CARD.heavyRounds.damage - 1) * ammoBoost(s);
-
 /**
  * The cards the Ammo branch strengthens (ID-263). Wider than `AMMO_CARDS`, the exclusive ammo
  * slot (Incendiary and Shock only): it adds Heavy Rounds, Piercing Rounds and Scavenged Ammo.
@@ -458,6 +453,12 @@ export const TECH_CARDS: Readonly<Record<TechBranch, readonly UpgradeId[]>> = {
   wire: ['barbed-wire'],
   ammo: TECH_AMMO_CARDS,
   mortars: ['oil-bomb'],
+  // ID-284: the unlock and Mk nodes add no offer weight (a starting pick is held from the start).
+  incendiary: [],
+  shock: [],
+  frag: [],
+  flashbang: [],
+  molotov: [],
 };
 
 /**
@@ -660,6 +661,15 @@ export function chooseCard(state: HordeState, index: number): HordeState {
 /** How often repeatable card `id` was picked this horde (ID-097). */
 const stack = (s: Pick<HordeState, 'cardLevels'>, id: UpgradeId): number => s.cardLevels[id] ?? 0;
 
+/**
+ * Takes card `id` as an offer pick does (ID-284: the starting pick uses it too): the other card
+ * of its slot and its levels go, the card is held a level higher, and a throwable's timer starts.
+ * Mutates `s`.
+ */
+export function grantCard(s: HordeState, id: UpgradeId): void {
+  applyUpgrade(s, id);
+}
+
 function applyUpgrade(s: HordeState, id: UpgradeId): void {
   const segments = s.layers.flatMap((l) => l.segments);
   // The one ammo slot (ID-097), and the throwable slot (ID-139): the other card of the
@@ -689,7 +699,7 @@ function applyUpgrade(s: HordeState, id: UpgradeId): void {
     case 'hollow-points':
       s.mods.damage =
         (1 + CARD.step.damage * stack(s, 'sharpshooter')) *
-        (took(s, 'hollow-points') ? heavyDamage(s) : 1);
+        (took(s, 'hollow-points') ? CARD.heavyRounds.damage : 1);
       break;
     case 'rapid-fire':
       s.mods.fireRate = 1 + CARD.step.fireRate * stack(s, 'rapid-fire');

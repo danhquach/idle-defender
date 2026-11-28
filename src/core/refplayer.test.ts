@@ -1,7 +1,7 @@
 // ID-265: the reference player's research schedule, pinned. The balance tests play it (balance/
 // refplayer.ts); a change to Scrap pay, slot prices or node costs moves this table on purpose.
 import { describe, expect, it } from 'vitest';
-import { TECH, TECH_IDS } from './data.ts';
+import { TECH, TECH_IDS, TECH_TABS } from './data.ts';
 import { MODE_IDS, MODE_UNLOCK_HORDE, type Mode } from './modes.ts';
 import {
   REF_EARNED_FLOOR,
@@ -10,6 +10,7 @@ import {
   REF_SHARE_LOW,
   REF_SLOTS_COST,
   refEarned,
+  REF_NODES,
   refTech,
 } from './balance/refplayer.ts';
 
@@ -32,6 +33,22 @@ const SCHEDULE: [Mode, number, number, number][] = [
 ];
 
 describe('the reference player (ID-265)', () => {
+  it('buys from the four Upgrades branches only, never one of the 15 ammo and throwable nodes (ID-284)', () => {
+    expect(REF_NODES.length).toBe(14);
+    expect(REF_NODES).toEqual(TECH_IDS.slice(0, 14));
+    for (const id of REF_NODES) expect(TECH_TABS.upgrades).toContain(TECH[id].branch);
+    const kit = TECH_IDS.slice(14);
+    for (const mode of MODE_IDS) {
+      for (let n = 1; n <= MODE_UNLOCK_HORDE; n++) {
+        for (const share of [REF_SHARE_LOW, REF_SHARE, 1]) {
+          for (const id of refTech(mode, n, share)) expect(kit).not.toContain(id);
+        }
+      }
+    }
+    // Even with all the Scrap there is, it stops at the 14 (every one of them).
+    expect(refTech('hell', MODE_UNLOCK_HORDE, 1).length).toBe(14);
+  });
+
   it('owns the pinned number of nodes at each point', () => {
     for (const [mode, n, at65, at40] of SCHEDULE) {
       expect(refTech(mode, n, REF_SHARE).length, `${mode} ${n} at 65%`).toBe(at65);

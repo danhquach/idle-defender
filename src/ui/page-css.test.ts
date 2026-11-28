@@ -1147,13 +1147,19 @@ describe('a patrol report is one size (ID-260)', () => {
 });
 
 describe('the Research Center chart has a fourth tier for the combos (ID-264)', () => {
+  it('a hidden tab’s panel stays hidden (ID-284: two tabs share the window)', () => {
+    expect(rules).toMatch(/\.research-body\[hidden\] \{\s*display: none;/);
+  });
+
   it('four tier columns, a line layer across all of them, and room for the panel beside it', () => {
     expect(rules).toMatch(
       /\.research-chart \{[^}]*grid-template-columns: 72px repeat\(4, minmax\(124px, 1fr\)\);/,
     );
     expect(rules).toMatch(/\.research-chart \{[^}]*min-width: 568px;/);
     expect(rules).toMatch(/\.research-lines \{[^}]*grid-area: 2 \/ 2 \/ 6 \/ 6;/);
-    expect(rules).toMatch(/\.camp-dialog\[data-tab='upgrades'\] \{\s*width: min\(900px, 100%\);/);
+    expect(rules).toMatch(
+      /\.camp-dialog\[data-tab='upgrades'\],\s*\.camp-dialog\[data-tab='kit'\] \{\s*width: min\(900px, 100%\);/,
+    );
     // Chart (568) + panel (260) + padding and gaps no longer fit below 864px: the panel goes under.
     expect(rules).toMatch(
       /@container \(max-width: 860px\) \{\s*\.research-body \{\s*flex-direction: column;/,
@@ -1570,6 +1576,7 @@ describe('the phone sheets (ID-276)', () => {
         ".camp-scrim .camp-dialog[data-tab='weapons']",
         ".camp-scrim .camp-dialog[data-tab='craft']",
         ".camp-scrim .camp-dialog[data-tab='upgrades']",
+        ".camp-scrim .camp-dialog[data-tab='kit']",
       ].join(',\n  '),
     );
     expect(sheet).toMatch(/width: 100%;/);
@@ -1706,6 +1713,31 @@ describe('the phone sheets (ID-276)', () => {
     const name = rule('.camp-scrim .research-node-name');
     expect(name).toMatch(/hyphens: manual;/);
     expect(name).toMatch(/word-break: normal;/);
+  });
+
+  it('Ammo & throwables (ID-284): five 40 px rows of one-line nodes fit under the header at 303 px', () => {
+    const chart = rule(".camp-scrim .research-chart[data-tab='kit']");
+    expect(chart).toMatch(/grid-template-columns: 48px repeat\(3, minmax\(0, 1fr\)\);/);
+    const rows = /grid-template-rows: auto repeat\(5, (\d+)px\);/.exec(chart);
+    const row = +rows![1]!;
+    expect(row).toBe(40);
+    // 28 header + 8 gap + 1 border, 4 + 4 body padding, the 15 px note and 2 clear, 18 tier header, five rows.
+    expect(28 + 8 + 1 + 4 + 4 + 15 + 2 + 18 + 5 * row).toBeLessThanOrEqual(303);
+    // One 13 px name over one 13 px face line, 2 + 2 padding, 2 border; 4 px clear above and below.
+    expect(13 + 13 + 2 + 2 + 2).toBeLessThanOrEqual(row - 8);
+    // The two Research pills are wide enough for two lines of 11 px, not an ellipsis.
+    const pill = rule(
+      ".camp-scrim .camp-dialog[data-tab='upgrades'] .camp-tabs .camp-tab,\n  .camp-scrim .camp-dialog[data-tab='kit'] .camp-tabs .camp-tab",
+    );
+    expect(pill).toMatch(/width: 112px;/);
+    expect(pill).toMatch(/white-space: normal;/);
+    // The desktop chart: three columns, five rows, the line layer across all of them.
+    expect(rules).toMatch(
+      /\.research-chart\[data-tab='kit'\] \{[^}]*grid-template-columns: 72px repeat\(3, minmax\(124px, 1fr\)\);[^}]*grid-template-rows: auto repeat\(5, 72px\);/,
+    );
+    expect(rules).toMatch(
+      /\.research-chart\[data-tab='kit'\] \.research-lines \{\s*grid-area: 2 \/ 2 \/ 7 \/ 5;/,
+    );
   });
 
   it('World map (ID-278): four areas in a row, a 44 px button, the countdown clear of the name', () => {

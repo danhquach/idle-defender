@@ -189,7 +189,7 @@ export const DAMAGE_NUMBERS: readonly {
     look: 'top',
     sample: '39!',
     name: 'Orange with "!".',
-    text: `A near-max crit: ×${TOP_CRIT} damage or more. Crit damage never varies, so every crit that survivor lands with that gun is orange.`,
+    text: `A near-max crit: ×${TOP_CRIT} damage or more, or a hand-load (the first round of a magazine with Hand-loads researched). Crit damage never varies, so every crit that survivor lands with that gun is orange.`,
   },
   {
     look: 'weak',

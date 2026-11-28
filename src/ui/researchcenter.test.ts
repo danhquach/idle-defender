@@ -3,15 +3,18 @@
 // the texts of a purchase. The buying rules are in core/techtree.test.ts; the app's confirm and
 // fight rules in app-research.test.ts. Text reaches the page only through textContent.
 import { describe, expect, it } from 'vitest';
-import { TECH, TECH_IDS, type TechId } from '../core/data.ts';
+import { TECH, TECH_IDS, TECH_TABS, type TechId } from '../core/data.ts';
 import { newGame, type GameState } from '../core/game.ts';
 import {
   createResearchCenter,
+  KIT_NOTE,
   nodeFace,
   RESEARCH_WAIT,
   researchOffer,
   researchQuestion,
   researchText,
+  tabLabel,
+  tabNodes,
   upgradesLabel,
   type ResearchOptions,
   type ResearchState,
@@ -80,7 +83,7 @@ describe('texts', () => {
     );
   });
 
-  it('the confirm: Tier 1 and 2 ask the price, Tier 3 and 4 repeat the effect', () => {
+  it('the confirm: Tier 1 and 2 ask the price, Tier 3 and 4 repeat the effect (and every Ammo & throwables node and Hand-loads, ID-284)', () => {
     expect(researchQuestion('reinforced-wall', 200, 2340)).toBe(
       'Research Reinforced Wall for 200 Scrap? You have 2,340.',
     );
@@ -92,7 +95,8 @@ describe('texts', () => {
     );
     for (const id of TECH_IDS) {
       const asks = researchQuestion(id, TECH[id].cost, 9999);
-      expect(asks.includes(TECH_EFFECT[id]), id).toBe(TECH[id].tier >= 3);
+      const repeats = TECH[id].tier >= 3 || id === 'hand-loads' || tabNodes('kit').includes(id);
+      expect(asks.includes(TECH_EFFECT[id]), id).toBe(repeats);
     }
   });
 
@@ -247,7 +251,7 @@ describe('the window', () => {
   });
 
   it('draws one connector line per prerequisite, green once its source is researched', () => {
-    const edges = TECH_IDS.flatMap((id) => TECH[id].needs.map((from) => [from, id]));
+    const edges = tabNodes('upgrades').flatMap((id) => TECH[id].needs.map((from) => [from, id]));
     const { rc } = mount(game(0, ['razor-wire']));
     rc.open();
     const lines = [...document.querySelectorAll<SVGElement>('.research-lines [data-from]')];
@@ -317,10 +321,14 @@ describe('the window', () => {
     expect(q('.research-wait').textContent).toBe('Research between hordes');
   });
 
-  it('Ammo nodes name the five cards in the detail panel', () => {
+  it('Hand-loads says what it does now, and Armour-piercing names the five cards (ID-284)', () => {
     const { rc, q } = mount(game(500));
     rc.open();
     node('hand-loads').click();
+    expect(q('.research-effect').textContent).toContain('first round');
+    expect(q('.research-effect').textContent).toContain('×3.25');
+    expect(q('.research-effect').textContent).not.toContain('Heavy Rounds');
+    node('armour-piercing').click();
     for (const card of [
       'Heavy Rounds',
       'Incendiary Rounds',
@@ -330,7 +338,6 @@ describe('the window', () => {
     ]) {
       expect(q('.research-effect').textContent).toContain(card);
     }
-    expect(q('.research-effect').textContent).toContain('you pick one of these cards');
   });
 
   it('a purchase: yes shows the answer on the status line and redraws; no changes nothing; a refusal is flagged', async () => {
@@ -441,5 +448,142 @@ describe('the top-bar button and its dot', () => {
     expect(dotOn()).toBe(true);
     q('.research-button').click();
     expect(rc.isOpen()).toBe(true);
+  });
+});
+
+describe('the Ammo & throwables tab (ID-284)', () => {
+  const kitTab = (): HTMLButtonElement =>
+    document.querySelector<HTMLButtonElement>('#camp-tab-kit')!;
+  const openKit = (initial: GameState) => {
+    const m = mount(initial);
+    m.rc.open();
+    kitTab().click();
+    return m;
+  };
+
+  it('is a second tab with its own count; the Upgrades tab still counts its 14', () => {
+    expect(tabLabel('kit', 2, 15)).toBe('Ammo & throwables · 2/15');
+    expect(tabNodes('upgrades')).toHaveLength(14);
+    expect(tabNodes('kit')).toHaveLength(15);
+    const { rc, st } = mount(game(0));
+    rc.open();
+    const tabs = [...document.querySelectorAll('.camp-tab')].map((t) => t.textContent);
+    expect(tabs).toEqual(['Upgrades · 0/14', 'Ammo & throwables · 0/15']);
+    st.game = game(0, ['razor-wire', 'incendiary-rounds', 'incendiary-rounds-mk2', 'molotov']);
+    rc.refresh();
+    expect([...document.querySelectorAll('.camp-tab')].map((t) => t.textContent)).toEqual([
+      'Upgrades · 1/14',
+      'Ammo & throwables · 3/15',
+    ]);
+  });
+
+  it('draws 15 nodes in 5 rows (the cards) and 3 columns headed Unlock, Mk II, Mk III', () => {
+    openKit(game(900));
+    const nodes = [...document.querySelectorAll<HTMLElement>('#camp-panel-kit .research-node')];
+    expect(nodes.map((n) => n.dataset.id)).toHaveLength(15);
+    const rows = new Map<string, string[]>();
+    for (const n of nodes) {
+      rows.set(n.style.gridRow, [...(rows.get(n.style.gridRow) ?? []), n.style.gridColumn]);
+    }
+    expect([...rows.keys()]).toEqual(['2', '3', '4', '5', '6']);
+    for (const cols of rows.values()) expect(cols).toEqual(['2', '3', '4']);
+    const heads = [...document.querySelectorAll('#camp-panel-kit .research-tier')].map(
+      (h) => h.textContent,
+    );
+    expect(heads).toEqual(['Unlock', 'Mk II', 'Mk III']);
+    const rowNames = [...document.querySelectorAll('#camp-panel-kit .research-branch')].map(
+      (h) => h.textContent,
+    );
+    expect(rowNames).toEqual(['Incendiary', 'Shock', 'Frag', 'Flashbang', 'Molotov']);
+    // The unlock is the card's name, the chain's others its Mk.
+    expect(
+      document.querySelector('#camp-panel-kit [data-id="frag-grenades"] .research-node-name')!
+        .textContent,
+    ).toBe('Frag Grenades');
+    expect(
+      document.querySelector('#camp-panel-kit [data-id="flashbang-mk3"] .research-node-name')!
+        .textContent,
+    ).toBe('Flashbang Mk III');
+    // No Tier 4 anywhere on it.
+    expect(document.querySelector('#camp-panel-kit .research-chart')!.textContent).not.toContain(
+      'Tier',
+    );
+    expect(document.querySelector('#camp-panel-kit .research-meta')!.textContent).toMatch(
+      /^(Unlock|Mk II|Mk III) · /,
+    );
+  });
+
+  it('draws one line per prerequisite of its own nodes, in a 3 by 5 box', () => {
+    openKit(game(900, ['incendiary-rounds']));
+    const svg = document.querySelector('#camp-panel-kit .research-lines')!;
+    expect(svg.getAttribute('viewBox')).toBe('0 0 3 5');
+    const lines = [...svg.querySelectorAll<SVGElement>('[data-from]')];
+    expect(lines).toHaveLength(10);
+    for (const l of lines) {
+      expect(l.tagName).toBe('line');
+      expect(l.dataset.done, `${l.dataset.from}`).toBe(
+        String(l.dataset.from === 'incendiary-rounds'),
+      );
+    }
+    // The Upgrades tab keeps its 4 by 4 box.
+    document.querySelector<HTMLButtonElement>('#camp-tab-upgrades')!.click();
+    expect(
+      document.querySelector('#camp-panel-upgrades .research-lines')!.getAttribute('viewBox'),
+    ).toBe('0 0 4 4');
+  });
+
+  it('says over the chart where an unlock is used', () => {
+    openKit(game(0));
+    expect(KIT_NOTE).toBe('Pick your starting ammo and throwable on the squad screen.');
+    expect(document.querySelector('#camp-panel-kit .research-kit-note')!.textContent).toBe(
+      KIT_NOTE,
+    );
+    expect(document.querySelector('#camp-panel-upgrades .research-kit-note')).toBeNull();
+  });
+
+  it('every node on it states its effect in the detail panel and repeats it in the confirm', () => {
+    const { q } = openKit(game(99999));
+    for (const id of tabNodes('kit')) {
+      document.querySelector<HTMLElement>(`#camp-panel-kit [data-id="${id}"]`)!.click();
+      expect(q('#camp-panel-kit .research-effect').textContent, id).toBe(TECH_EFFECT[id]);
+      expect(researchQuestion(id, TECH[id].cost, 99999), id).toContain(TECH_EFFECT[id]);
+      expect(TECH_EFFECT[id], id).not.toBe('');
+    }
+    expect(TECH_TABS.kit).toHaveLength(5);
+  });
+
+  it('an unlock reads the same in the confirm, Mk II and Mk III with their numbers', () => {
+    expect(researchQuestion('incendiary-rounds', 500, 2000)).toBe(
+      'Research Incendiary Rounds for 500 Scrap? Can be the squad’s starting ammo card. You have 2,000.',
+    );
+    expect(researchQuestion('frag-grenades-mk3', 3500, 4000)).toContain('32.5%');
+    expect(researchQuestion('frag-grenades-mk3', 3500, 4000)).toContain('77 px');
+    expect(researchQuestion('flashbang-mk3', 2500, 4000)).toContain('110 px');
+    expect(researchQuestion('molotov-mk3', 2500, 4000)).toContain('5 / 7 / 9 s');
+    expect(researchQuestion('shock-rounds-mk2', 1000, 4000)).toContain('0.23 / 0.345 / 0.46 s');
+    expect(researchQuestion('incendiary-rounds-mk2', 1000, 4000)).toContain('3.45 / 6.9 / 10.35%');
+  });
+
+  it('buying from it goes through the same confirm, and redraws the tab', async () => {
+    const { rc, st, calls, q } = mount(game(600));
+    rc.open();
+    kitTab().click();
+    document.querySelector<HTMLElement>('#camp-panel-kit [data-id="shock-rounds"]')!.click();
+    expect(q('#camp-panel-kit .research-go').textContent).toBe(
+      'Research · 600/500 Scrap'.replace('600/', ''),
+    );
+    q('#camp-panel-kit .research-go').click();
+    await flush();
+    expect(calls).toEqual(['shock-rounds']);
+    expect(st.game).toBeDefined();
+  });
+
+  it('the window stays open across a tab switch, and closing resets nothing it needs', () => {
+    const { rc } = openKit(game(0));
+    expect(rc.isOpen()).toBe(true);
+    document.querySelector<HTMLButtonElement>('#camp-tab-upgrades')!.click();
+    expect(rc.isOpen()).toBe(true);
+    rc.close();
+    expect(rc.isOpen()).toBe(false);
   });
 });

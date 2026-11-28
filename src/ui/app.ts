@@ -40,6 +40,7 @@ import {
   stashCap,
   upgradeGun,
   withUpgradedGun,
+  pickKit,
   toggleSkill,
   toggleSquad,
   treatSurvivor,
@@ -154,6 +155,7 @@ import {
   SKILL_KEYS,
   STRIKE_HINT_MS,
   skillPicker,
+  kitPicker,
   skillSlots,
   OFFER_KEYS,
   SPEED_KEYS,
@@ -463,6 +465,18 @@ export function start(root: HTMLElement, art: Art): void {
     if (horde?.outcome === 'fighting' && !dialogOpen()) hold(!held);
   });
   // The skill pick (ID-100), between hordes only: saved at once, so it is there next time.
+  // The starting card for a slot (ID-284), between hordes only: saved at once, so it is there next
+  // time. The waiting wall behind the screen holds it too.
+  hud.onKitPick((slot, card) => {
+    if (horde && !resultUp()) return;
+    const r = pickKit(game, slot, card);
+    if (!r.ok) hud.toast(refusedText(r));
+    else {
+      commit(r.game);
+      if (!horde) preview = startSquadHorde(game, 0, Date.now());
+    }
+    hud.showKit(kitPicker(game));
+  });
   hud.onSkillPick((skill) => {
     if (horde && !resultUp()) return;
     const r = toggleSkill(game, skill);
@@ -826,6 +840,8 @@ export function start(root: HTMLElement, art: Art): void {
     commit(now.r.game);
     // The waiting wall shows the new node at once (ID-270); a finished horde keeps its own.
     if (!horde) preview = startSquadHorde(game, 0, Date.now());
+    // An unlock shows its picker on the screen behind the window at once (ID-284).
+    hud.showKit(kitPicker(game));
     refreshResultScrap();
     return { ok: true, text: researchText(id, now.r.cost, now.r.game.stock.scrap) };
   }

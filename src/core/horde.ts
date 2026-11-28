@@ -465,6 +465,12 @@ export interface Defender extends DefenderSpec {
   reloadedAt: Record<Slot, number>;
   /** Shots fired in the current burst of a burst-fire gun (ID-135); absent = 0. */
   burst?: number;
+  /**
+   * Hand-loads (ID-284), per gun slot: absent = the next round is a hand-load. Set to 0 when it
+   * is fired; a clip gun's refill clears it; a shell-loaded gun's counts the shells loaded since
+   * and clears at a full magazine's worth. Written only with Hand-loads researched.
+   */
+  hand?: Partial<Record<Slot, number>>;
   /** Throws they carry for the throwable slot (ID-178); absent = a full `CARD.throws.carry`. */
   throws?: number;
   /** Fight time their next throw comes back (ID-178); absent while they carry a full load. */
@@ -655,6 +661,8 @@ export interface Fire {
   y: number;
   at: number;
   until: number;
+  /** Molotov Mk II / Mk III (ID-284): the factor on its damage, fixed at the throw; absent = 1. */
+  factor?: number;
 }
 /** An airstrike bomb still in the air, landing at `(x, y)` at `at` (ID-041). */
 export interface Incoming {
@@ -676,6 +684,13 @@ export interface Grenade {
   /** Absent: a Frag Grenade (and every tar bomb). */
   item?: Exclude<Throwable, 'frag'>;
   seconds?: number;
+  /**
+   * Mk II / Mk III (ID-284), fixed at the throw like `seconds`, so a swap of the card leaves it as
+   * thrown: the burst or landing reach in px, and the factor on a burst's or a fire's damage.
+   * Absent without a Mk (or a reach the card's own).
+   */
+  reach?: number;
+  dmg?: number;
   by: string;
   fromX: number;
   fromY: number;
@@ -714,6 +729,8 @@ export interface Blast {
   x: number;
   y: number;
   at: number;
+  /** A Flashbang's reach in px when its Mk widened it (ID-284); absent = `CARD.flashbang.radius`. */
+  radius?: number;
 }
 /** Multipliers from upgrade cards; all start at 1. */
 export interface Mods {
@@ -1261,9 +1278,49 @@ export const wallTechShare = (tech: readonly TechId[]): number =>
     ),
   );
 
-/** Hand-loads' factor on an ammo card's number (ID-263); 1 with none. */
-export const ammoBoost = (state: Pick<HordeState, 'tech'>): number =>
-  hasTech(state, 'hand-loads') ? TECH_FX.ammo : 1;
+/** The five cards the Research Center upgrades Mk II and Mk III (ID-284). */
+export type MkCard =
+  'incendiary-rounds' | 'shock-rounds' | 'frag-grenades' | 'flashbang' | 'molotov';
+
+/**
+ * Card `card`'s Mk this fight (ID-284): 0 (none), 1 (Mk II) or 2 (Mk III), the highest researched
+ * counting, and only while the card is held, so a card from an offer and one from the starting
+ * pick are the same card and nothing else gets its Mk.
+ */
+export const mkOf = (state: Pick<HordeState, 'tech' | 'taken'>, card: MkCard): 0 | 1 | 2 => {
+  if (!took(state, card)) return 0;
+  if (hasTech(state, `${card}-mk3`)) return 2;
+  return hasTech(state, `${card}-mk2`) ? 1 : 0;
+};
+
+/** `n` raised by card `card`'s Mk factor from `factors` (Mk II, Mk III); `n` untouched with none. */
+const mkTimes = (
+  s: Pick<HordeState, 'tech' | 'taken'>,
+  card: MkCard,
+  factors: readonly number[],
+  n: number,
+): number => {
+  const mk = mkOf(s, card);
+  return mk === 0 ? n : n * factors[mk - 1]!;
+};
+
+/** A Frag Grenade's burst reach in px, wider by `TECH_FX.mk.reach` at Mk III (ID-284). */
+export const fragRadius = (s: Pick<HordeState, 'tech' | 'taken'>): number =>
+  mkOf(s, 'frag-grenades') === 2 ? CARD.frag.radius * TECH_FX.mk.reach : CARD.frag.radius;
+
+/** A Flashbang's landing reach in px, wider by `TECH_FX.mk.reach` at Mk III (ID-284). */
+export const flashRadius = (s: Pick<HordeState, 'tech' | 'taken'>): number =>
+  mkOf(s, 'flashbang') === 2 ? CARD.flashbang.radius * TECH_FX.mk.reach : CARD.flashbang.radius;
+
+/** The seconds a Flashbang thrown now stuns for, at card level `seconds` plus its Mk's (ID-284). */
+export const stunSeconds = (s: Pick<HordeState, 'tech' | 'taken'>, seconds: number): number => {
+  const mk = mkOf(s, 'flashbang');
+  return mk === 0 ? seconds : seconds + TECH_FX.mk.stun[mk - 1]!;
+};
+
+/** The seconds a Molotov fire thrown now burns for, at card level `seconds`, +1 s at Mk III (ID-284). */
+export const fireSeconds = (s: Pick<HordeState, 'tech' | 'taken'>, seconds: number): number =>
+  mkOf(s, 'molotov') === 2 ? seconds + TECH_FX.mk.fireSeconds : seconds;
 
 /** An Oil Bomb slick's radius (ID-263): wider with Wide Slick, which writes it at landing. */
 export const slickRadius = (k: Pick<Slick, 'radius'>): number => k.radius ?? CARD.oil.radius;
@@ -1992,14 +2049,32 @@ function reload(s: HordeState, d: Defender): void {
     if (gunOf(id).shells) {
       if (d.ammo[slot] < magazineOf(s, id, d)) {
         d.ammo[slot] += 1;
+        rearm(s, d, slot, id, 1);
         // From now at the latest, so a long-stale time (Extended Mags picked mid-fight on a
         // partly empty gun) can't load a shell every step.
         d.reloadedAt[slot] = Math.max(d.reloadedAt[slot], s.time - STEP) + shellIn(s, d, id);
       }
     } else if (d.ammo[slot] === 0) {
       d.ammo[slot] = magazineOf(s, id, d);
+      rearm(s, d, slot, id, d.ammo[slot]);
     }
   }
+}
+
+/**
+ * Hand-loads (ID-284): `added` rounds went into gun `id` in `slot` of `d`. A fired hand-load
+ * comes back with the next refill of a clip gun, and once a full magazine's worth of shells has
+ * gone into a shell-loaded gun since it was fired. Does nothing while it is ready or unresearched.
+ */
+function rearm(s: HordeState, d: Defender, slot: Slot, id: Held, added: number): void {
+  const hand = d.hand;
+  if (added <= 0 || hand?.[slot] === undefined) return;
+  if (gunOf(id).shells) {
+    hand[slot] += added;
+    if (hand[slot] < magazineOf(s, id, d)) return;
+  }
+  delete hand[slot];
+  if (Object.keys(hand).length === 0) delete d.hand;
 }
 
 /**
@@ -2019,8 +2094,8 @@ const shellIn = (s: HordeState, d: Defender, id: Held): number =>
   reloadIn(s, d, id) / gunOf(id).magazine;
 
 /** Scavenged Ammo's chance (ID-132) that a squad gun's shot uses no round, at its level. */
-export const scavengeOf = (s: Parameters<typeof cardLevel>[0] & Pick<HordeState, 'tech'>): number =>
-  Math.min(1, atLevel(s, 'scavenged-ammo', CARD.scavenge) * ammoBoost(s));
+export const scavengeOf = (s: Parameters<typeof cardLevel>[0]): number =>
+  Math.min(1, atLevel(s, 'scavenged-ammo', CARD.scavenge));
 
 /** Marks a round Scavenged Ammo saved `by` a survivor (ID-132), unless one did within `SAVE_CUE.gap` s. */
 function savedRound(s: HordeState, by: string): void {
@@ -2125,15 +2200,9 @@ export function squadCanCrit(
  * every level (ID-124: max is 75%, no longer always), rolled on the fight's RNG for the
  * whole shot.
  */
-export function extraPierce(
-  s: Parameters<typeof cardLevel>[0] & Pick<HordeState, 'tech'>,
-  rng: Rng,
-): number {
+export function extraPierce(s: Parameters<typeof cardLevel>[0], rng: Rng): number {
   if (!took(s, 'piercing-rounds')) return 0;
-  // Hand-loads (ID-263) raises the chance, never past 1.
-  return chance(rng, Math.min(1, atLevel(s, 'piercing-rounds', CARD.pierce) * ammoBoost(s)))
-    ? 1
-    : 0;
+  return chance(rng, atLevel(s, 'piercing-rounds', CARD.pierce)) ? 1 : 0;
 }
 
 /**
@@ -2232,14 +2301,17 @@ function launch(
     spread: number;
     range: number;
     pellets: number;
+    /** Hand-loads (ID-284): what pellet 0 alone carries in place of the shot's own damage and marks. */
+    first?: Partial<Pick<Bullet, 'damage' | 'crit' | 'top' | 'ap'>>;
   },
 ): void {
-  const { x, y, target, spread, range, pellets, ...rest } = shot;
+  const { x, y, target, spread, range, pellets, first, ...rest } = shot;
   const aim = leadPoint(x, y, target, rest.speed);
   const heading = Math.atan2(aim.y - y, aim.x - x);
   const distance = Math.hypot(aim.x - x, aim.y - y);
-  const bullet = (angle: number): Bullet => ({
+  const bullet = (angle: number, own?: typeof first): Bullet => ({
     ...rest,
+    ...own,
     x,
     y,
     dx: Math.cos(angle),
@@ -2251,7 +2323,9 @@ function launch(
     hit: [],
   });
   for (let i = 0; i < pellets; i++) {
-    s.bullets.push(bullet(heading + ((rng() * 2 - 1) * spread * Math.PI) / 180));
+    s.bullets.push(
+      bullet(heading + ((rng() * 2 - 1) * spread * Math.PI) / 180, i === 0 ? first : undefined),
+    );
   }
   s.shots.push({ owner: rest.owner, at: s.time + STEP });
 }
@@ -2516,7 +2590,9 @@ function reloadAll(s: HordeState): void {
     for (const slot of ['primary', 'secondary'] as const) {
       const id = d.loadout[slot];
       if (id === null || !isGun(id)) continue;
-      d.ammo[slot] = Math.max(d.ammo[slot], magazineOf(s, id, d));
+      const before = d.ammo[slot];
+      d.ammo[slot] = Math.max(before, magazineOf(s, id, d));
+      rearm(s, d, slot, id, d.ammo[slot] - before);
       d.reloadedAt[slot] = Math.min(d.reloadedAt[slot], s.time);
     }
   }
@@ -2579,7 +2655,8 @@ function shock(s: HordeState, e: Enemy): void {
   if (e.shockUntil !== undefined && s.time < e.shockUntil + CARD.shock.immune - EPS) return;
   const heavy = CARD.shock.heavyKinds.includes(e.kind);
   const secs =
-    atLevel(s, 'shock-rounds', CARD.shock.seconds) * ammoBoost(s) * (heavy ? CARD.shock.heavy : 1);
+    mkTimes(s, 'shock-rounds', TECH_FX.mk.shock, atLevel(s, 'shock-rounds', CARD.shock.seconds)) *
+    (heavy ? CARD.shock.heavy : 1);
   e.shockUntil = s.time + secs;
   e.stunnedUntil = Math.max(e.stunnedUntil, e.shockUntil);
 }
@@ -2620,15 +2697,31 @@ function throwHeld(s: HordeState): void {
   for (const d of s.defenders) restock(s, d, c.every);
   const throwers = onTheLine(s).filter((d) => carried(d) > 0);
   const skip = item === 'flashbang' ? (e: Enemy) => !flashable(s, e) : undefined;
-  const aim = throwAt(s, throwers, c.range, c.radius, c.flight, skip);
+  const reach =
+    item === 'frag' ? fragRadius(s) : item === 'flashbang' ? flashRadius(s) : CARD[item].radius;
+  const aim = throwAt(s, throwers, c.range, reach, c.flight, skip);
   if (!aim) return;
   const thrower = throwers.find((d) => d.id === aim.by)!;
   if (item === 'frag') {
-    s.grenades.push(aim);
+    const mk = mkOf(s, 'frag-grenades');
+    s.grenades.push({
+      ...aim,
+      ...(mk === 2 ? { reach: fragRadius(s) } : {}),
+      ...(mk > 0 ? { dmg: TECH_FX.mk.frag[mk - 1]! } : {}),
+    });
     // The shot that was due waits out the pause too.
     thrower.nextShotAt = Math.max(thrower.nextShotAt, s.time) + CARD.frag.pause;
   } else {
-    s.grenades.push({ ...aim, item, seconds: atLevel(s, item, CARD[item].seconds) });
+    const level = atLevel(s, item, CARD[item].seconds);
+    const seconds = item === 'flashbang' ? stunSeconds(s, level) : fireSeconds(s, level);
+    const mk = mkOf(s, item);
+    s.grenades.push({
+      ...aim,
+      item,
+      seconds,
+      ...(item === 'flashbang' && mk === 2 ? { reach: flashRadius(s) } : {}),
+      ...(item === 'molotov' && mk > 0 ? { dmg: TECH_FX.mk.fire[mk - 1]! } : {}),
+    });
   }
   s.feats.push({ kind: 'throw', by: aim.by, at: s.time });
   if (carried(thrower) === CARD.throws.carry) thrower.throwBackAt = s.time + c.every;
@@ -2947,13 +3040,26 @@ export const slickDps = (s: Pick<HordeState, 'hordeNumber' | 'wave' | 'hpScale'>
 function landItem(s: HordeState, g: Grenade, item: Exclude<Throwable, 'frag'>): void {
   const seconds = g.seconds ?? CARD[item].seconds[0]!;
   if (item === 'molotov') {
-    s.fires.push({ x: g.x, y: g.y, at: s.time, until: s.time + seconds });
+    s.fires.push({
+      x: g.x,
+      y: g.y,
+      at: s.time,
+      until: s.time + seconds,
+      ...(g.dmg !== undefined ? { factor: g.dmg } : {}),
+    });
     return;
   }
-  s.blasts.push({ skill: 'flashbang', x: g.x, y: g.y, at: s.time });
+  const reach = g.reach ?? CARD.flashbang.radius;
+  s.blasts.push({
+    skill: 'flashbang',
+    x: g.x,
+    y: g.y,
+    at: s.time,
+    ...(g.reach !== undefined ? { radius: g.reach } : {}),
+  });
   for (const e of s.enemies) {
     if (e.hp <= 0 || !flashable(s, e)) continue;
-    if (Math.hypot(e.x - g.x, e.y - g.y) > CARD.flashbang.radius + EPS) continue;
+    if (Math.hypot(e.x - g.x, e.y - g.y) > reach + EPS) continue;
     e.dazedUntil = s.time + seconds;
     e.stunnedUntil = Math.max(e.stunnedUntil, e.dazedUntil);
   }
@@ -2969,7 +3075,7 @@ function blowFrags(s: HordeState): void {
   s.grenades = s.grenades.filter(
     (g) => (g.item === undefined || !g.burst) && s.time - g.lands < CARD.frag.flash,
   );
-  const damage = fragDamage(s);
+  const hp = shamblerHp(s);
   for (const g of s.grenades) {
     if (g.burst || !due(s.time, g.lands)) continue;
     g.burst = true;
@@ -2977,8 +3083,11 @@ function blowFrags(s: HordeState): void {
       landItem(s, g, g.item);
       continue;
     }
+    // The burst and reach are the ones it was thrown with (ID-284).
+    const damage = CARD.frag.share * (g.dmg ?? 1) * hp;
+    const reach = g.reach ?? CARD.frag.radius;
     for (const e of s.enemies) {
-      if (e.hp > 0 && Math.hypot(e.x - g.x, e.y - g.y) <= CARD.frag.radius + EPS) {
+      if (e.hp > 0 && Math.hypot(e.x - g.x, e.y - g.y) <= reach + EPS) {
         const dmg = taken(s, e, damage);
         popOn(s, e, dmg);
         e.hp = Math.max(0, e.hp - dmg);
@@ -3044,14 +3153,19 @@ function fire(s: HordeState, rng: Rng): void {
     // Aim for the Head and Hollow Points (ID-130) add theirs on any weapon.
     const crit = critChance(defender, gun, id) + (gun ? gunCrit(id) : 0) + cardCrit(s);
     const critHit = crit > 0 && chance(rng, crit);
-    const critTimes = critHit
-      ? CRIT_DAMAGE + gunCritDamage(id) + cardCritDamage(s) + critDamageOf(defender, id)
-      : 1;
+    const ownCrit =
+      CRIT_DAMAGE + gunCritDamage(id) + cardCritDamage(s) + critDamageOf(defender, id);
+    const critTimes = critHit ? ownCrit : 1;
     // A near-ceiling crit's number is orange (ID-262).
     // A hair under, so a sum that is exactly the line in decimals never misses it by rounding.
     const top = critHit && critTimes >= TOP_CRIT - 1e-9;
-    const hit =
-      weapon.damage * s.mods.damage * boost(s, 'damage') * damageFactor(defender, id) * critTimes;
+    const plain = weapon.damage * s.mods.damage * boost(s, 'damage') * damageFactor(defender, id);
+    const hit = plain * critTimes;
+    // Hand-loads (ID-284): the first round of a magazine always crits, at `TOP_CRIT` or the
+    // survivor's own crit multiplier when higher. The roll above is drawn as ever; a pellet-0
+    // override carries the result, so no draw is added or skipped.
+    const handLoad = gun && hasTech(s, 'hand-loads') && defender.hand?.[slot] === undefined;
+    if (handLoad) (defender.hand ??= {})[slot] = 0;
     if (gun) {
       const traits = { ...traitsOf(id, critHit), shot: s.time };
       const close = traits.close ?? 0;
@@ -3069,6 +3183,16 @@ function fire(s: HordeState, rng: Rng): void {
         tracer: gunOf(id).tracer,
         ...(critHit ? { crit: true as const } : {}),
         ...(top ? { top: true as const } : {}),
+        ...(handLoad
+          ? {
+              first: {
+                damage: plain * Math.max(TOP_CRIT, ownCrit),
+                crit: true as const,
+                top: true as const,
+                ...(traitsOf(id, true).ap ? { ap: true as const } : {}),
+              },
+            }
+          : {}),
         ...(s.mode !== undefined && !s.noTraits && classOf(id) !== null
           ? { cls: classOf(id)! }
           : {}),
@@ -3353,8 +3477,9 @@ export const shamblerHp = (s: Pick<HordeState, 'hordeNumber' | 'wave' | 'hpScale
  * A Molotov fire's damage a second (ID-114, ID-139): `CARD.molotov.burn` of this wave's
  * Shambler HP, so it keeps up with enemy HP as hordes go up.
  */
-export const fireDps = (s: Pick<HordeState, 'hordeNumber' | 'wave' | 'hpScale'>): number =>
-  CARD.molotov.burn * shamblerHp(s);
+export const fireDps = (
+  s: Pick<HordeState, 'hordeNumber' | 'wave' | 'hpScale' | 'tech' | 'taken'>,
+): number => mkTimes(s, 'molotov', TECH_FX.mk.fire, CARD.molotov.burn) * shamblerHp(s);
 
 /** Whether `e` stands in a Molotov's fire (ID-139): outside the camp only. */
 export const inFire = (s: Pick<HordeState, 'fires'>, e: Enemy): boolean =>
@@ -3364,11 +3489,18 @@ export const inFire = (s: Pick<HordeState, 'fires'>, e: Enemy): boolean =>
 export const burnDpsOf = (
   s: Parameters<typeof cardLevel>[0] &
     Pick<HordeState, 'hordeNumber' | 'wave' | 'hpScale' | 'tech'>,
-): number => atLevel(s, 'incendiary-rounds', CARD.burn.share) * ammoBoost(s) * shamblerHp(s);
+): number =>
+  mkTimes(
+    s,
+    'incendiary-rounds',
+    TECH_FX.mk.burn,
+    atLevel(s, 'incendiary-rounds', CARD.burn.share),
+  ) * shamblerHp(s);
 
 /** A Frag Grenade's burst (ID-124): `CARD.frag.share` of this wave's Shambler HP. */
-export const fragDamage = (s: Pick<HordeState, 'hordeNumber' | 'wave' | 'hpScale'>): number =>
-  CARD.frag.share * shamblerHp(s);
+export const fragDamage = (
+  s: Pick<HordeState, 'hordeNumber' | 'wave' | 'hpScale' | 'tech' | 'taken'>,
+): number => mkTimes(s, 'frag-grenades', TECH_FX.mk.frag, CARD.frag.share) * shamblerHp(s);
 
 /** Whether a flashbang still holds `e` (fight time, so it waits out picks too). */
 export const stunned = (s: Pick<HordeState, 'time'>, e: Enemy): boolean =>
@@ -3443,8 +3575,10 @@ function burn(s: HordeState): void {
     e.hp = Math.max(0, e.hp - dmg);
     e.burnt = (e.burnt ?? 0) + dmg;
   }
-  const fireHit = fireDps(s) * STEP;
+  const fireBase = shamblerHp(s);
   for (const f of s.fires) {
+    // Each fire burns at the Mk it was thrown with (ID-284).
+    const fireHit = CARD.molotov.burn * (f.factor ?? 1) * fireBase * STEP;
     for (const e of s.enemies) {
       if (Math.hypot(e.x - f.x, e.y - f.y) <= CARD.molotov.radius + EPS) {
         const dmg = taken(s, e, fireHit);

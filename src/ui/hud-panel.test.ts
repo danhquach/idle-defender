@@ -97,7 +97,13 @@ describe('one structure on every screen (ID-196)', () => {
       expect(skills.querySelector('.hud-horde-label')!.textContent, name).toMatch(/^Skills/);
       expect(skills.querySelectorAll('.hud-skill-option').length, name).toBeGreaterThan(0);
       // The horde select is in the card, Start under the skills, neither in the other's part.
-      expect(classes(row.children), name).toEqual(['hud-skill-pick', 'hud-button btn-primary']);
+      // ID-284: the starting pick's group sits between them, hidden until something is unlocked.
+      expect(classes(row.children), name).toEqual([
+        'hud-skill-pick',
+        'hud-kit-pick',
+        'hud-button btn-primary',
+      ]);
+      expect(row.querySelector<HTMLElement>('.hud-kit-pick')!.hidden, name).toBe(true);
       expect(card.querySelector('#hud-horde-select'), name).not.toBeNull();
       expect(row.querySelector('select'), name).toBeNull();
       expect(skills.querySelector('select, .hud-start-row'), name).toBeNull();

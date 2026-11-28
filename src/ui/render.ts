@@ -3697,14 +3697,15 @@ function explosions(
   for (const b of scene.blasts) {
     const flash = b.skill === 'flashbang';
     const u = (scene.time - b.at) / SKILL_FLASH;
-    const r = flash ? CARD.flashbang.radius : SKILLS.airstrike.radius;
+    // A Flashbang's blast is as wide as it was thrown (ID-284).
+    const r = flash ? (b.radius ?? CARD.flashbang.radius) : SKILLS.airstrike.radius;
     add(flash ? 'white' : 'fire', b.x, b.y, r, FIREBALL_WIDTH.airstrike, u, b.at);
   }
   for (const g of scene.grenades) {
     // A landed Flashbang or Molotov shows as its blast or fire (ID-139).
     if (scene.time < g.lands || g.item !== undefined) continue;
     const u = (scene.time - g.lands) / CARD.frag.flash;
-    add('fire', g.x, g.y, CARD.frag.radius, FIREBALL_WIDTH.frag, u, g.lands);
+    add('fire', g.x, g.y, g.reach ?? CARD.frag.radius, FIREBALL_WIDTH.frag, u, g.lands);
   }
   return out;
 }

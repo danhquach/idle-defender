@@ -1810,6 +1810,17 @@ button[data-card='tar-moat'] .hud-held-icon {
     align-items: stretch;
   }
 
+  /* The starting pick takes a row of its own over the skills and Start: its two buttons side by side. */
+  .hud-debrief .hud-kit-pick {
+    flex: 1 0 100%;
+    flex-direction: row;
+    order: -1;
+  }
+
+  .hud-debrief .hud-kit-pick > .hud-kit-button {
+    flex: 1 1 0;
+  }
+
   .hud-debrief .hud-skill-pick > .hud-horde-label {
     position: absolute;
     width: 1px;
@@ -2195,6 +2206,128 @@ button[data-card='tar-moat'] .hud-held-icon {
   margin: 0;
   color: var(--color-text-muted);
   font-size: var(--text-sm);
+}
+
+/* The starting pick (ID-284): a button per slot with something unlocked, beside the skills; its
+   list floats over the button (fixed, on the hud root, inside the window by the script). */
+.hud-kit-pick {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.hud-kit-pick[hidden],
+.hud-kit-list[hidden] {
+  display: none;
+}
+
+.hud-kit-button,
+.hud-kit-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 44px;
+  padding: var(--space-4) var(--space-8);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* No pick: dashed and dim; a pick: solid (and on the phone a tick, below). */
+.hud-kit-button {
+  position: relative;
+}
+
+.hud-kit-button[data-state='none'] {
+  border-style: dashed;
+  color: var(--color-text-muted);
+}
+
+.hud-kit-button:hover,
+.hud-kit-option:hover {
+  background: var(--color-surface-hover);
+}
+
+.hud-kit-button:focus-visible,
+.hud-kit-option:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.hud-kit-button[aria-expanded='true'],
+.hud-kit-option[aria-selected='true'] {
+  border-color: var(--color-accent);
+  background: var(--color-surface-hover);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+
+.hud-kit-icon {
+  flex: none;
+  width: 28px;
+  height: 28px;
+}
+
+/* No pick: an empty, dashed box where the icon would be. */
+.hud-kit-empty {
+  box-sizing: border-box;
+  border: 1px dashed var(--color-border-disabled);
+  border-radius: var(--radius-md);
+}
+
+.hud-kit-text,
+.hud-kit-option-text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.hud-kit-label,
+.hud-kit-option-detail {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.hud-kit-card,
+.hud-kit-option-name {
+  min-width: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.hud-kit-card {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hud-kit-list {
+  position: fixed;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  box-sizing: border-box;
+  padding: var(--space-8);
+  overflow-y: auto;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-panel-solid);
+  box-shadow: 0 8px 18px var(--color-shadow);
+}
+
+.hud-kit-rule {
+  margin: 0 0 var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
 }
 
 .hud-skill-key {
@@ -8724,7 +8857,8 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   .camp-scrim .camp-dialog,
   .camp-scrim .camp-dialog[data-tab='weapons'],
   .camp-scrim .camp-dialog[data-tab='craft'],
-  .camp-scrim .camp-dialog[data-tab='upgrades'] {
+  .camp-scrim .camp-dialog[data-tab='upgrades'],
+  .camp-scrim .camp-dialog[data-tab='kit'] {
     position: relative;
     container-type: inline-size;
     width: 100%;
@@ -8946,6 +9080,30 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   .camp-scrim .research-face-lead,
   .camp-scrim .research-face-unit {
     display: none;
+  }
+
+  /* Ammo & throwables (ID-284): five 40 px rows of one-line nodes (a 13 px name over a 13 px
+     face, 2 + 2 padding, 2 border: 32 of the 40 px, 4 px clear above and below) under a one-line
+     note: 28 + 8 + 1 + 4 + 4 + 17 + 18 + 5 x 40 = 280 of the 303 px. Its pills are the two
+     Research tabs, 112 px wide so "Ammo & throwables · 0/15" breaks to two lines, not an ellipsis. */
+  .camp-scrim .research-chart[data-tab='kit'] {
+    grid-template-columns: 48px repeat(3, minmax(0, 1fr));
+    grid-template-rows: auto repeat(5, 40px);
+  }
+
+  .camp-scrim .research-kit-note {
+    margin: 0 0 var(--space-2);
+    font-size: 11px;
+    line-height: 15px;
+  }
+
+  .camp-scrim .camp-dialog[data-tab='upgrades'] .camp-tabs .camp-tab,
+  .camp-scrim .camp-dialog[data-tab='kit'] .camp-tabs .camp-tab {
+    width: 112px;
+    min-width: 112px;
+    font-size: 11px;
+    line-height: 13px;
+    white-space: normal;
   }
 
   /* The World map (ID-278): the four areas side by side, each a short picture, its drops and the
@@ -9511,6 +9669,57 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
     flex: 1 1 88px;
     width: auto;
     min-width: 0;
+  }
+
+  /* The starting pick (ID-284): two 44 px icon buttons 8 px apart (the words stay for a screen
+     reader), and its list a sheet between the rails, as tall as its content. */
+  .hud-debrief .hud-kit-pick {
+    flex: none;
+    flex-flow: row nowrap;
+    order: 0;
+    gap: var(--space-8);
+  }
+
+  .hud-debrief .hud-kit-pick > .hud-kit-button {
+    flex: none;
+    justify-content: center;
+    width: 44px;
+    min-width: 44px;
+    padding: 0;
+  }
+
+  /* The icon alone shows whether a card is picked: a tick on a pick, dashed and dim with none. */
+  .hud-kit-button[data-state='none'] .hud-kit-icon {
+    opacity: 0.6;
+  }
+
+  .hud-kit-button[data-state='set'] {
+    border-color: var(--color-accent);
+  }
+
+  .hud-kit-button[data-state='set']::after {
+    content: '\2713';
+    position: absolute;
+    top: 0;
+    right: 3px;
+    color: var(--color-ok-text);
+    font-size: 11px;
+    line-height: 13px;
+  }
+
+  .hud-kit-button .hud-kit-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .hud-kit-list {
+    inset: auto 52px 4px;
+    width: auto;
+    max-height: calc(100dvh - 8px);
   }
 
   /* A win's weapons: the gun's name on its own line, wrapping between words (never cut with
@@ -11764,6 +11973,11 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
   overflow-y: auto;
 }
 
+/* The window hides a tab's panel by the attribute; the flex above must not show it (ID-284). */
+.research-body[hidden] {
+  display: none;
+}
+
 .research-scroll {
   flex: 1 1 auto;
   min-width: 0;
@@ -11779,8 +11993,25 @@ body:has(.intro-scrim:not([hidden])) .scrap-chip {
 
 /* Wide enough for the chart (568px) beside the panel (260px) without scrolling; its own dialog,
    so no tab strip moves. */
-.camp-dialog[data-tab='upgrades'] {
+.camp-dialog[data-tab='upgrades'],
+.camp-dialog[data-tab='kit'] {
   width: min(900px, 100%);
+}
+
+/* Ammo & throwables (ID-284): five rows (the cards) by three columns (Unlock, Mk II, Mk III), so
+   a chain reads left to right. The same chart and lines, 444px at least: no sideways scroll. */
+.research-chart[data-tab='kit'] {
+  grid-template-columns: 72px repeat(3, minmax(124px, 1fr));
+  grid-template-rows: auto repeat(5, 72px);
+  min-width: 444px;
+}
+
+.research-chart[data-tab='kit'] .research-lines {
+  grid-area: 2 / 2 / 7 / 5;
+}
+
+.research-kit-note {
+  margin: 0 0 var(--space-6);
 }
 
 .research-lines {
